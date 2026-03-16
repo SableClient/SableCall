@@ -485,6 +485,7 @@ export const SettingsModal: FC<Props> = ({
         env={import.meta.env}
         client={client}
         livekitRooms={livekitRooms}
+        roomId={roomId}
       />
     ),
   };
