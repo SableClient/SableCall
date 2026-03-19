@@ -118,7 +118,7 @@ export const videoInput = new Setting<string | undefined>(
 export const backgroundBlur = new Setting<boolean>("background-blur", false);
 export const rnnoiseNoiseSuppression = new Setting<boolean>(
   "rnnoise-noise-suppression",
-  false,
+  true,
 );
 export const rnnoiseNoiseSuppressionPreset =
   new Setting<RNNoiseSuppressionPreset>(
