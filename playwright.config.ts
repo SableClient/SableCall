@@ -7,6 +7,9 @@ Please see LICENSE in the repository root for full details.
 */
 
 import { defineConfig, devices } from "@playwright/test";
+import { join } from "path";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const baseURL = process.env.USE_DOCKER
   ? "http://localhost:8080"
@@ -37,6 +40,14 @@ const fakeMediaArgs = buildFakeMediaArgs();
 const chromiumLaunchArgs = disableChromiumSandbox
   ? [...fakeMediaArgs, "--no-sandbox", "--disable-setuid-sandbox"]
   : fakeMediaArgs;
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Needed by the synapse admin API called in fixtures
+process.env.NODE_EXTRA_CA_CERTS = join(
+  __dirname,
+  "backend/dev_tls_local-ca.crt",
+);
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -91,6 +102,11 @@ export default defineConfig({
           firefoxUserPrefs: {
             "permissions.default.microphone": 1,
             "permissions.default.camera": 1,
+            // Equivalent to Chromium's --use-fake-device-for-media-stream:
+            // feeds a synthetic media stream so getUserMedia and
+            // enumerateDevices work on CI runners without real hardware.
+            "media.navigator.streams.fake": true,
+            "media.navigator.permission.disabled": true,
           },
         },
       },
