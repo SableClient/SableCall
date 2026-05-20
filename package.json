@@ -161,7 +161,6 @@
       "esbuild": "^0.28.0"
     }
   },
-  "packageManager": "yarn@4.7.0",
   "dependencies": {
     "@jitsi/rnnoise-wasm": "0.2.1"
   }
