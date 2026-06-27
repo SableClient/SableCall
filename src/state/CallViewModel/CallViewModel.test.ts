@@ -1402,7 +1402,6 @@ describe.each([
         {
           autoLeaveWhenOthersLeft: false,
           autoLeaveDelayMs: 0,
-          autoLeaveDelayMs: 0,
           encryptionSystem: { kind: E2eeType.PER_PARTICIPANT },
         },
       );
