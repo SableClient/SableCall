@@ -201,7 +201,13 @@ export function createCallNotificationLifecycle$({
     ringAttempts$.pipe(
       switchMap(({ outcome$ }) =>
         outcome$.pipe(
-          filter((outcome) => outcome === "decline"), // Removed 'timeout' so ring timeouts don't hang up
+          switchMap((outcome) => {
+            if (outcome === "decline") return of("decline" as const);
+            if (outcome === "timeout") {
+              return timer(autoLeaveDelay).pipe(map(() => "timeout" as const));
+            }
+            return NEVER;
+          }),
         ),
       ),
     ),
