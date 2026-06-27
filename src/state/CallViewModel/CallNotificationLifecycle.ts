@@ -88,7 +88,11 @@ export interface Props {
   receivedDecline$: Observable<
     Parameters<EventTimelineSetHandlerMap[RoomEvent.Timeline]>
   >;
-  options: { waitForCallPickup?: boolean; autoLeaveWhenOthersLeft?: boolean };
+  options: {
+    waitForCallPickup?: boolean;
+    autoLeaveWhenOthersLeft?: boolean;
+    autoLeaveDelayMs?: number;
+  };
   localUser: { deviceId: string; userId: string };
 }
 
@@ -114,6 +118,7 @@ export function createCallNotificationLifecycle$({
   autoLeave$: Observable<AutoLeaveReason>;
 } {
   let ringAttempts$: Observable<RingAttempt> = NEVER;
+  const autoLeaveDelay = options.autoLeaveDelayMs ?? 180000;
   if (options.waitForCallPickup)
     ringAttempts$ = sentCallNotification$.pipe(
       filter(
@@ -183,7 +188,7 @@ export function createCallNotificationLifecycle$({
         hasOthersJoined &&
         current.every((m) => m.userId === localUser.userId)
       ) {
-        return timer(180000).pipe(map(() => "allOthersLeft" as const));
+        return timer(autoLeaveDelay).pipe(map(() => "allOthersLeft" as const));
       }
       return NEVER;
     }),

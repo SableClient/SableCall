@@ -1362,7 +1362,7 @@ describe.each([
           });
         },
         {
-          autoLeaveWhenOthersLeft: true,
+          autoLeaveWhenOthersLeft: true, autoLeaveDelayMs: 0,
           encryptionSystem: { kind: E2eeType.PER_PARTICIPANT },
         },
       );
@@ -1380,7 +1380,7 @@ describe.each([
           expectObservable(vm.autoLeave$).toBe("-");
         },
         {
-          autoLeaveWhenOthersLeft: true,
+          autoLeaveWhenOthersLeft: true, autoLeaveDelayMs: 0,
           encryptionSystem: { kind: E2eeType.PER_PARTICIPANT },
         },
       );
@@ -1398,7 +1398,8 @@ describe.each([
           expectObservable(vm.autoLeave$).toBe("-");
         },
         {
-          autoLeaveWhenOthersLeft: false,
+          autoLeaveWhenOthersLeft: false, autoLeaveDelayMs: 0,
+          autoLeaveDelayMs: 0,
           encryptionSystem: { kind: E2eeType.PER_PARTICIPANT },
         },
       );
@@ -1428,7 +1429,7 @@ describe.each([
           });
         },
         {
-          autoLeaveWhenOthersLeft: true,
+          autoLeaveWhenOthersLeft: true, autoLeaveDelayMs: 0,
           encryptionSystem: { kind: E2eeType.PER_PARTICIPANT },
         },
       );

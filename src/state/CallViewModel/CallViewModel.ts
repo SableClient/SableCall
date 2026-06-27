@@ -173,6 +173,7 @@ const logger = rootLogger.getChild("[CallViewModel]");
 export interface CallViewModelOptions {
   encryptionSystem: EncryptionSystem;
   autoLeaveWhenOthersLeft?: boolean;
+  autoLeaveDelayMs?: number;
   /**
    * If the call is started in a way where we want it to behave like a telephone usecase
    * If we sent a notification event, we want the ui to show a ringing state

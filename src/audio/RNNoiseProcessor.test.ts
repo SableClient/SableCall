@@ -15,10 +15,10 @@ import {
   supportsRNNoiseProcessor,
 } from "./RNNoiseProcessor";
 
-const RNNOISE_WORKLET_MODULE_URL = "/assets/RNNoiseWorkletModule.js";
+const RNNOISE_WORKLET_MODULE_URL = "/src/audio/RNNoiseWorkletModule.ts?worker_file&type=module";
 
 vi.mock("./RNNoiseWorkletModule.ts?url", () => ({
-  default: "/assets/RNNoiseWorkletModule.js",
+  default: RNNOISE_WORKLET_MODULE_URL,
 }));
 
 type TestContext = {
@@ -216,7 +216,7 @@ describe("RNNoiseProcessor", () => {
 
   it("initializes audio graph and exposes processed track", async () => {
     const t = createTestContext();
-    vi.stubGlobal("AudioWorkletNode", vi.fn().mockReturnValue(t.workletNode));
+    vi.stubGlobal("AudioWorkletNode", class { constructor() { return t.workletNode; } });
     const processor = new RNNoiseProcessor("balanced");
 
     await processor.init({
@@ -237,7 +237,7 @@ describe("RNNoiseProcessor", () => {
 
   it("destroys processing graph and is idempotent", async () => {
     const t = createTestContext();
-    vi.stubGlobal("AudioWorkletNode", vi.fn().mockReturnValue(t.workletNode));
+    vi.stubGlobal("AudioWorkletNode", class { constructor() { return t.workletNode; } });
     const processor = new RNNoiseProcessor();
 
     await processor.init({
@@ -267,10 +267,8 @@ describe("RNNoiseProcessor", () => {
   it("restart re-initializes with a new processed track", async () => {
     const first = createTestContext();
     const second = createTestContext();
-    const workletCtor = vi
-      .fn()
-      .mockReturnValueOnce(first.workletNode)
-      .mockReturnValueOnce(second.workletNode);
+    let _c = 0;
+      const workletCtor = class { constructor() { return _c++ === 0 ? first.workletNode : second.workletNode; } };
     vi.stubGlobal("AudioWorkletNode", workletCtor);
 
     const processor = new RNNoiseProcessor();
@@ -293,7 +291,7 @@ describe("RNNoiseProcessor", () => {
 
   it("loads the worklet module once per AudioContext", async () => {
     const t = createTestContext();
-    vi.stubGlobal("AudioWorkletNode", vi.fn().mockReturnValue(t.workletNode));
+    vi.stubGlobal("AudioWorkletNode", class { constructor() { return t.workletNode; } });
     const firstProcessor = new RNNoiseProcessor();
     const secondProcessor = new RNNoiseProcessor();
 
@@ -337,7 +335,7 @@ describe("RNNoiseProcessor", () => {
 
   it("updates worklet preset at runtime", async () => {
     const t = createTestContext();
-    vi.stubGlobal("AudioWorkletNode", vi.fn().mockReturnValue(t.workletNode));
+    vi.stubGlobal("AudioWorkletNode", class { constructor() { return t.workletNode; } });
     const processor = new RNNoiseProcessor();
 
     await processor.init({
@@ -356,9 +354,10 @@ describe("RNNoiseProcessor", () => {
 
   it("bypasses RNNoise for unsupported audio context sample rates", async () => {
     const t = createTestContext(44100);
-    const workletCtor = vi.fn().mockReturnValue(t.workletNode);
+    const workletCtor = vi.fn();
+    const workletClass = class { constructor() { workletCtor(); return t.workletNode; } };
     const warningSpy = vi.spyOn(logger, "warn");
-    vi.stubGlobal("AudioWorkletNode", workletCtor);
+    vi.stubGlobal("AudioWorkletNode", workletClass);
     const processor = new RNNoiseProcessor();
 
     await expect(
@@ -377,10 +376,11 @@ describe("RNNoiseProcessor", () => {
 
   it("propagates worklet registration failures", async () => {
     const t = createTestContext();
-    const workletCtor = vi.fn().mockReturnValue(t.workletNode);
+    const workletCtor = vi.fn();
+    const workletClass = class { constructor() { workletCtor(); return t.workletNode; } };
     const addModuleError = new Error("Failed to register worklet module");
     t.addModule.mockRejectedValueOnce(addModuleError);
-    vi.stubGlobal("AudioWorkletNode", workletCtor);
+    vi.stubGlobal("AudioWorkletNode", workletClass);
     const processor = new RNNoiseProcessor();
 
     await expect(
@@ -396,8 +396,9 @@ describe("RNNoiseProcessor", () => {
 
   it("restarts with the last known audio context when restart omits audioContext", async () => {
     const t = createTestContext();
-    const workletCtor = vi.fn().mockReturnValue(t.workletNode);
-    vi.stubGlobal("AudioWorkletNode", workletCtor);
+    const workletCtor = vi.fn();
+    const workletClass = class { constructor() { workletCtor(); return t.workletNode; } };
+    vi.stubGlobal("AudioWorkletNode", workletClass);
     const processor = new RNNoiseProcessor();
 
     await processor.init({
@@ -499,10 +500,8 @@ describe("RNNoiseProcessor", () => {
   it("init() called twice without destroy() cleans up previous nodes", async () => {
     const first = createTestContext();
     const second = createTestContext();
-    const workletCtor = vi
-      .fn()
-      .mockReturnValueOnce(first.workletNode)
-      .mockReturnValueOnce(second.workletNode);
+    let _c = 0;
+      const workletCtor = class { constructor() { return _c++ === 0 ? first.workletNode : second.workletNode; } };
     vi.stubGlobal("AudioWorkletNode", workletCtor);
 
     const processor = new RNNoiseProcessor();
@@ -537,7 +536,7 @@ describe("RNNoiseProcessor", () => {
         resolveAddModule = resolve;
       }),
     );
-    vi.stubGlobal("AudioWorkletNode", vi.fn().mockReturnValue(t.workletNode));
+    vi.stubGlobal("AudioWorkletNode", class { constructor() { return t.workletNode; } });
 
     const processor1 = new RNNoiseProcessor();
     const processor2 = new RNNoiseProcessor();
@@ -568,7 +567,7 @@ describe("RNNoiseProcessor", () => {
         resolveAddModule = resolve;
       }),
     );
-    vi.stubGlobal("AudioWorkletNode", vi.fn().mockReturnValue(t.workletNode));
+    vi.stubGlobal("AudioWorkletNode", class { constructor() { return t.workletNode; } });
 
     const processor = new RNNoiseProcessor();
     const initPromise = processor.init({
