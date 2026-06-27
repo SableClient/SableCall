@@ -88,7 +88,7 @@ describe("ECConnectionFactory - Audio inputs options", () => {
         false,
         undefined,
         echo,
-        noise
+        noise,
       );
       ecConnectionFactory.createConnection(
         testScope,
