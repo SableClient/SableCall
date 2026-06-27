@@ -6,7 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
 Please see LICENSE in the repository root for full details.
 */
 
-import { test, vi, onTestFinished, it, describe } from "vitest";
+import { test, vi, onTestFinished, it, describe, expect } from "vitest";
 import {
   BehaviorSubject,
   combineLatest,
@@ -22,6 +22,7 @@ import { SyncState } from "matrix-js-sdk";
 import {
   ConnectionState,
   type LocalTrackPublication,
+  type Participant,
   type RemoteParticipant,
 } from "livekit-client";
 import * as ComponentsCore from "@livekit/components-core";
@@ -65,7 +66,7 @@ import {
   localParticipant,
   withCallViewModel as withCallViewModelInMode,
 } from "./CallViewModelTestUtils.ts";
-import { MatrixRTCMode } from "../../settings/settings.ts";
+import { MatrixRTCMode } from "../../config/ConfigOptions.ts";
 import { initializeWidget } from "../../widget.ts";
 
 initializeWidget();
@@ -84,6 +85,14 @@ vi.mock("../e2ee/matrixKeyProvider");
 
 const getUrlParams = vi.hoisted(() => vi.fn(() => ({})));
 vi.mock("../UrlParams", () => ({ getUrlParams }));
+
+const getPlatform = vi.hoisted(() => vi.fn(() => "desktop"));
+vi.mock("../../Platform", () => ({
+  get platform(): string {
+    return getPlatform();
+  },
+  isFirefox: (): boolean => false,
+}));
 
 vi.mock(
   "../state/CallViewModel/localMember/localTransport",
@@ -838,6 +847,94 @@ describe.each([
     });
   });
 
+  // Test cases for footer visibility in PIP mode across different platforms
+  const PIP_FOOTER_VISIBILITY_TEST_CASES: Array<{
+    platform: "ios" | "android" | "desktop";
+    expectedMarbles: string;
+    description: string;
+  }> = [
+    {
+      platform: "ios",
+      expectedMarbles: "tf",
+      description: "hidden on iOS",
+    },
+    {
+      platform: "android",
+      expectedMarbles: "tf",
+      description: "hidden on Android",
+    },
+    {
+      platform: "desktop",
+      expectedMarbles: "t",
+      description: "visible on desktop",
+    },
+  ];
+
+  it.each(PIP_FOOTER_VISIBILITY_TEST_CASES)(
+    "footer is $description in PIP mode",
+    ({ platform: testPlatform, expectedMarbles }) => {
+      withTestScheduler(({ schedule, expectObservable }) => {
+        // Set platform for this test case
+        getPlatform.mockReturnValue(testPlatform);
+
+        // Enable PIP mode after initial render
+        const pipControlInputMarbles = "-e";
+
+        withCallViewModel(
+          {
+            remoteParticipants$: constant([aliceParticipant]),
+            rtcMembers$: constant([localRtcMember, aliceRtcMember]),
+          },
+          (vm) => {
+            schedule(pipControlInputMarbles, {
+              e: () => window.controls.enablePip(),
+            });
+
+            expectObservable(vm.showFooter$).toBe(expectedMarbles, {
+              t: true,
+              f: false,
+            });
+          },
+        );
+      });
+    },
+  );
+
+  // TODO add media to lk mocks
+  test("onPipMediaOrientationUpdate is called with the spotlight media orientation", () => {
+    // Set the spy before creating the view model so the initial call is captured
+    const onPipMediaOrientationUpdate = vi.fn();
+    window.controls.onPipMediaOrientationUpdate = onPipMediaOrientationUpdate;
+    onTestFinished(() => {
+      window.controls.onPipMediaOrientationUpdate = undefined;
+    });
+
+    withTestScheduler(({ behavior }) => {
+      // Alice starts as a regular participant, then shares her screen, then stops
+      const aliceSharingInputMarbles = "nyn";
+
+      withCallViewModel(
+        {
+          remoteParticipants$: constant([aliceParticipant]),
+          rtcMembers$: constant([localRtcMember, aliceRtcMember]),
+          sharingScreen: new Map([
+            [aliceParticipant, behavior(aliceSharingInputMarbles, yesNo)],
+          ]),
+        },
+        () => {},
+      );
+    });
+
+    // Should be called exactly 3 times:
+    // 1. Initially with "portrait" (Alice is in spotlight as a user, default portrait orientation)
+    // 2. With "landscape" when Alice starts screen sharing (screen shares always use landscape)
+    // 3. With "portrait" again when Alice stops screen sharing and returns to user tile
+    expect(onPipMediaOrientationUpdate).toHaveBeenCalledTimes(3);
+    expect(onPipMediaOrientationUpdate).toHaveBeenNthCalledWith(1, "portrait");
+    expect(onPipMediaOrientationUpdate).toHaveBeenNthCalledWith(2, "landscape");
+    expect(onPipMediaOrientationUpdate).toHaveBeenNthCalledWith(3, "portrait");
+  });
+
   test("PiP tile in expanded spotlight layout switches speakers without layout shifts", () => {
     withTestScheduler(({ behavior, schedule, expectObservable }) => {
       // Switch to spotlight immediately
@@ -935,6 +1032,10 @@ describe.each([
             a: [localRtcMember],
             b: [localRtcMember, aliceRtcMember],
           }),
+          videoEnabled: new Map<Participant, Behavior<boolean>>([
+            [localParticipant, constant(true)],
+            [aliceParticipant, constant(true)],
+          ]),
         },
         (vm) => {
           schedule(modeInputMarbles, {
@@ -959,6 +1060,33 @@ describe.each([
               },
             },
           );
+        },
+      );
+    });
+  });
+
+  test("expanded spotlight layout hides PiP tile in one-on-one voice call", () => {
+    withTestScheduler(({ behavior, schedule, expectObservable }) => {
+      withCallViewModel(
+        {
+          remoteParticipants$: constant([aliceParticipant]),
+          roomMembers: [local, alice],
+          rtcMembers$: constant([localRtcMember, aliceRtcMember]),
+          videoEnabled: new Map<Participant, Behavior<boolean>>([
+            [localParticipant, constant(false)],
+            [aliceParticipant, constant(false)],
+          ]),
+          windowSize$: constant({ width: 700, height: 380 }), // Mobile phone in landscape
+        },
+        (vm) => {
+          // Layout should show remote tile only
+          expectObservable(summarizeLayout$(vm.layout$)).toBe("a", {
+            a: {
+              type: "spotlight-expanded",
+              spotlight: [`${aliceId}:0`],
+              pip: undefined,
+            },
+          });
         },
       );
     });
@@ -1000,7 +1128,7 @@ describe.each([
               b: {
                 type: "spotlight-expanded",
                 spotlight: [`${aliceId}:0`],
-                pip: `${localId}:0`,
+                pip: undefined,
               },
               c: {
                 type: "grid",
@@ -1324,8 +1452,14 @@ describe.each([
             },
           });
 
-          // Should ring for 30ms and then time out
-          expectObservable(vm.ringing$).toBe("(ny) 26ms n", yesNo);
+          expectObservable(vm.ringingVm$).toBe("(ab)", {
+            a: null,
+            b: expect.objectContaining({
+              type: "ringing",
+              userId: alice.userId,
+              intent: "audio",
+            }),
+          });
           // Layout should show placeholder media for the participant we're
           // ringing the entire time (even once timed out)
           expectObservable(summarizeLayout$(vm.layout$)).toBe("a", {
@@ -1364,7 +1498,14 @@ describe.each([
           });
 
           // Should ring until Alice joins
-          expectObservable(vm.ringing$).toBe("(ny) 17ms n", yesNo);
+          expectObservable(vm.ringingVm$).toBe("(ab) 17ms a", {
+            a: null,
+            b: expect.objectContaining({
+              type: "ringing",
+              userId: alice.userId,
+              intent: "audio",
+            }),
+          });
           // Layout should show placeholder media for the participant we're
           // ringing the entire time
           expectObservable(summarizeLayout$(vm.layout$)).toBe("a 20ms b", {

@@ -38,6 +38,7 @@ import { useMediaQuery } from "../useMediaQuery";
 import { E2eeType } from "../e2ee/e2eeType";
 import { Link } from "../button/Link";
 import { useMediaDevices } from "../MediaDevicesContext";
+import { ObservableScope } from "../state/ObservableScope";
 import { useInitial } from "../useInitial";
 import {
   useTrackProcessor,
@@ -46,8 +47,11 @@ import {
 import { usePageTitle } from "../usePageTitle";
 import { getValue } from "../utils/observable";
 import { useBehavior } from "../useBehavior";
-import { CallFooter } from "../components/CallFooter";
+import { CallFooter, type FooterSnapshot } from "../components/CallFooter";
 import { useCallViewKeyboardShortcuts } from "../useCallViewKeyboardShortcuts";
+import { createLobbyFooterViewModel } from "../components/CallFooterViewModel";
+import { type ViewModel } from "../state/ViewModel";
+import { useAppBarPrimaryButtonIconKind } from "../AppBar";
 
 interface Props {
   client: MatrixClient;
@@ -82,8 +86,9 @@ export const LobbyView: FC<Props> = ({
   }, []);
 
   const { t } = useTranslation();
-  usePageTitle(matrixInfo.roomName);
 
+  usePageTitle(matrixInfo.roomName);
+  useAppBarPrimaryButtonIconKind("back");
   const audioEnabled = useBehavior(muteStates.audio.enabled$);
   const videoEnabled = useBehavior(muteStates.video.enabled$);
   const toggleAudio = useBehavior(muteStates.audio.toggle$);
@@ -112,6 +117,7 @@ export const LobbyView: FC<Props> = ({
       logger.error("Failed to navigate to /", error);
     });
   }, [navigate]);
+  const hangup = confineToRoom ? undefined : onLeaveClick;
 
   const recentsButtonInFooter = useMediaQuery("(max-height: 500px)");
   const recentsButton = !confineToRoom && (
@@ -184,6 +190,27 @@ export const LobbyView: FC<Props> = ({
 
   useTrackProcessorSync(videoTrack);
 
+  const [footerVm, setFooterVm] = useState<ViewModel<FooterSnapshot> | null>(
+    null,
+  );
+  useEffect(() => {
+    const footerScope = new ObservableScope();
+    setFooterVm(
+      createLobbyFooterViewModel(
+        footerScope,
+        muteStates,
+        devices,
+        openSettings,
+        hangup,
+        // Logo and header are connected: only show the logo in SPA with header.
+        !hideHeader,
+      ),
+    );
+    return (): void => {
+      footerScope.end();
+    };
+  }, [devices, hangup, hideHeader, muteStates, onLeaveClick, openSettings]);
+
   // TODO: Unify this component with InCallView, so we can get slick joining
   // animations and don't have to feel bad about reusing its CSS
   return (
@@ -227,18 +254,11 @@ export const LobbyView: FC<Props> = ({
           </VideoPreview>
           {!recentsButtonInFooter && recentsButton}
         </div>
-        <CallFooter
-          audioEnabled={audioEnabled}
-          videoEnabled={videoEnabled}
-          toggleAudio={toggleAudio ?? undefined}
-          toggleVideo={toggleVideo ?? undefined}
-          openSettings={openSettings}
-          hangup={!confineToRoom ? onLeaveClick : undefined}
-          // Logo and header are connected. We will only show the logo in SPA with header.
-          hideLogo={hideHeader}
-        >
-          {recentsButtonInFooter && recentsButton}
-        </CallFooter>
+        {footerVm !== null && (
+          <CallFooter vm={footerVm}>
+            {recentsButtonInFooter && recentsButton}
+          </CallFooter>
+        )}
       </div>
       {client && (
         <SettingsModal

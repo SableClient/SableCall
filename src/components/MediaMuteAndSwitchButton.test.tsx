@@ -8,14 +8,38 @@ Please see LICENSE in the repository root for full details.
 import { describe, expect, test, vi } from "vitest";
 import { act, render, screen, type RenderResult } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type JSX, useState } from "react";
+import { type JSX, useState, type ReactNode } from "react";
+import { TooltipProvider } from "@vector-im/compound-web";
 
 import { MediaMuteAndSwitchButton } from "./MediaMuteAndSwitchButton";
+import { MediaDevicesContext } from "../MediaDevicesContext";
+import { type MediaDevices } from "../state/MediaDevices";
+
+interface RenderOptions {
+  requestDeviceNames: () => void;
+}
+
+function renderComponent(
+  component: ReactNode,
+  { requestDeviceNames = (): void => {} }: Partial<RenderOptions> = {},
+): RenderResult {
+  return render(
+    <TooltipProvider>
+      <MediaDevicesContext
+        value={{ requestDeviceNames } as unknown as MediaDevices}
+      >
+        {component}
+      </MediaDevicesContext>
+    </TooltipProvider>,
+  );
+}
 
 describe("MediaMuteAndSwitchButton", () => {
   test("renders", () => {
-    const { container } = render(
-      <MediaMuteAndSwitchButton title={"Switcher"} />,
+    const { container } = renderComponent(
+      <TooltipProvider>
+        <MediaMuteAndSwitchButton title={"Switcher"} iconsAndLabels={"audio"} />
+      </TooltipProvider>,
     );
     expect(container).toMatchSnapshot();
   });
@@ -25,7 +49,7 @@ describe("MediaMuteAndSwitchButton", () => {
       type: "video" | "audio",
       enabled: boolean,
     ): RenderResult => {
-      return render(
+      return renderComponent(
         <MediaMuteAndSwitchButton
           title={"Switcher"}
           iconsAndLabels={type}
@@ -39,23 +63,23 @@ describe("MediaMuteAndSwitchButton", () => {
     const renderVideoDisabled = renderLabels("video", false);
 
     expect(
-      renderAudioEndabled.getByRole("button", { name: "Mute microphone" }),
+      renderAudioEndabled.getByRole("switch", { name: "Mute microphone" }),
     ).toBeInTheDocument();
     expect(
-      renderAudioDisabled.getByRole("button", { name: "Unmute microphone" }),
+      renderAudioDisabled.getByRole("switch", { name: "Unmute microphone" }),
     ).toBeInTheDocument();
     expect(
-      renderVideoEnabled.getByRole("button", { name: "Start video" }),
+      renderVideoEnabled.getByRole("switch", { name: "Start video" }),
     ).toBeInTheDocument();
     expect(
-      renderVideoDisabled.getByRole("button", { name: "Stop video" }),
+      renderVideoDisabled.getByRole("switch", { name: "Stop video" }),
     ).toBeInTheDocument();
   });
 
   test("calls mute on mute press", async () => {
     const user = userEvent.setup();
     const onMute = vi.fn();
-    const { getByRole } = render(
+    const { getByRole } = renderComponent(
       <MediaMuteAndSwitchButton
         title={"Switcher"}
         onMuteClick={onMute}
@@ -64,22 +88,117 @@ describe("MediaMuteAndSwitchButton", () => {
       />,
     );
 
-    await user.click(getByRole("button", { name: "Mute microphone" }));
+    await user.click(getByRole("switch", { name: "Mute microphone" }));
 
     expect(onMute).toHaveBeenCalled();
+  });
+
+  test("disables mute button while busy", async () => {
+    const user = userEvent.setup();
+    const onMute = vi.fn();
+    const { getByRole } = renderComponent(
+      <MediaMuteAndSwitchButton
+        title={"Switcher"}
+        onMuteClick={onMute}
+        iconsAndLabels="audio"
+        enabled={true}
+        busy={true}
+      />,
+    );
+
+    const muteButton = getByRole("switch", { name: "Mute microphone" });
+    expect(muteButton).toHaveAttribute("aria-disabled", "true");
+    expect(muteButton).toHaveAttribute("aria-busy", "true");
+
+    await user.click(muteButton);
+    expect(onMute).not.toHaveBeenCalled();
+  });
+
+  test("disables video button while busy", async () => {
+    const user = userEvent.setup();
+    const onMute = vi.fn();
+    const { getByRole } = renderComponent(
+      <MediaMuteAndSwitchButton
+        title={"Switcher"}
+        onMuteClick={onMute}
+        iconsAndLabels="video"
+        enabled={true}
+        busy={true}
+      />,
+    );
+
+    const videoButton = getByRole("switch", { name: "Stop video" });
+    expect(videoButton).toHaveAttribute("aria-disabled", "true");
+    expect(videoButton).toHaveAttribute("aria-busy", "true");
+
+    await user.click(videoButton);
+    expect(onMute).not.toHaveBeenCalled();
+  });
+
+  test("requests device names when opened", async () => {
+    const user = userEvent.setup();
+    const requestDeviceNames = vi.fn();
+    renderComponent(
+      <MediaMuteAndSwitchButton
+        title="Switcher"
+        iconsAndLabels="audio"
+        enabled
+      />,
+      { requestDeviceNames },
+    );
+
+    expect(requestDeviceNames).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Microphone" }));
+    expect(requestDeviceNames).toHaveBeenCalled();
+  });
+
+  test("shows numbered devices correctly", async () => {
+    const user = userEvent.setup();
+    renderComponent(
+      <>
+        <MediaMuteAndSwitchButton
+          title="Switcher"
+          iconsAndLabels="audio"
+          enabled
+          options={[
+            { label: { type: "number", number: 1 }, id: "mic1" },
+            { label: { type: "number", number: 2 }, id: "mic2" },
+          ]}
+          selectedOption="mic1"
+        />
+        <MediaMuteAndSwitchButton
+          title="Switcher"
+          iconsAndLabels="video"
+          enabled
+          options={[
+            { label: { type: "number", number: 1 }, id: "cam1" },
+            { label: { type: "number", number: 2 }, id: "cam2" },
+          ]}
+          selectedOption="cam1"
+        />
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Microphone" }));
+    screen.getByRole("menuitem", { name: "Microphone 1" });
+    screen.getByRole("menuitem", { name: "Microphone 2" });
+    await user.keyboard("[Escape]");
+    await user.click(screen.getByRole("button", { name: "Camera" }));
+    screen.getByRole("menuitem", { name: "Camera 1" });
+    screen.getByRole("menuitem", { name: "Camera 2" });
   });
 
   test("calls select callback on menu click", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
-    const { getByRole } = render(
+    const { getByRole } = renderComponent(
       <MediaMuteAndSwitchButton
         title="Switcher"
         iconsAndLabels="audio"
         enabled={true}
         options={[
-          { label: "Microphone 1", id: "mic1" },
-          { label: "Microphone 2", id: "mic2" },
+          { label: { type: "name", name: "Microphone 1" }, id: "mic1" },
+          { label: { type: "name", name: "Microphone 2" }, id: "mic2" },
         ]}
         selectedOption="mic1"
         onSelect={onSelect}
@@ -94,14 +213,14 @@ describe("MediaMuteAndSwitchButton", () => {
   test("does not call select callback on already selected menu click", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
-    const { getByRole } = render(
+    const { getByRole } = renderComponent(
       <MediaMuteAndSwitchButton
         title="Switcher"
         iconsAndLabels="audio"
         enabled={true}
         options={[
-          { label: "Microphone 1", id: "mic1" },
-          { label: "Microphone 2", id: "mic2" },
+          { label: { type: "name", name: "Microphone 1" }, id: "mic1" },
+          { label: { type: "name", name: "Microphone 2" }, id: "mic2" },
         ]}
         selectedOption="mic1"
         onSelect={onSelect}
@@ -127,8 +246,8 @@ describe("MediaMuteAndSwitchButton", () => {
           iconsAndLabels="audio"
           enabled={true}
           options={[
-            { label: "Microphone 1", id: "mic1" },
-            { label: "Microphone 2", id: "mic2" },
+            { label: { type: "name", name: "Microphone 1" }, id: "mic1" },
+            { label: { type: "name", name: "Microphone 2" }, id: "mic2" },
           ]}
           selectedOption={selectedOption}
           onSelect={(id) => {
@@ -142,7 +261,7 @@ describe("MediaMuteAndSwitchButton", () => {
       );
     }
 
-    const { getByRole } = render(<Wrapper />);
+    const { getByRole } = renderComponent(<Wrapper />);
 
     await user.click(getByRole("button", { name: "Microphone" }));
     await user.click(screen.getByRole("menuitem", { name: "Microphone 2" }));
@@ -174,39 +293,40 @@ describe("MediaMuteAndSwitchButton", () => {
   test("renders menu with toggle control and calls toggle callback", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();
-    const { getByRole } = render(
+    const onVideoBlurToggle = vi.fn();
+    const { getByRole } = renderComponent(
       <MediaMuteAndSwitchButton
         title="Switcher"
-        iconsAndLabels="audio"
+        iconsAndLabels="video"
         enabled={true}
-        toggles={[{ label: "Background blur", id: "bg_blur", enabled: false }]}
+        videoBlurToggleClick={onVideoBlurToggle}
         onSelect={onSelect}
       />,
     );
 
-    await user.click(getByRole("button", { name: "Microphone" }));
+    await user.click(getByRole("button", { name: "Camera" }));
 
     const toggle = screen.getByRole("menuitemcheckbox", {
-      name: "Background blur",
+      name: "Blur background",
     });
     expect(toggle).toBeInTheDocument();
     expect(toggle).toHaveAttribute("aria-checked", "false");
 
     await user.click(toggle);
 
-    expect(onSelect).toHaveBeenCalledWith("bg_blur");
+    expect(onVideoBlurToggle).toHaveBeenCalled();
   });
 
   test("renders check icon to mark the selected menu item", async () => {
     const user = userEvent.setup();
-    const { getByRole } = render(
+    const { getByRole } = renderComponent(
       <MediaMuteAndSwitchButton
         title="Switcher"
         iconsAndLabels="audio"
         enabled={true}
         options={[
-          { label: "Microphone 1", id: "mic1" },
-          { label: "Microphone 2", id: "mic2" },
+          { label: { type: "name", name: "Microphone 1" }, id: "mic1" },
+          { label: { type: "name", name: "Microphone 2" }, id: "mic2" },
         ]}
         selectedOption="mic2"
       />,

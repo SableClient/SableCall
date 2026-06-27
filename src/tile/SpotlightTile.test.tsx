@@ -28,7 +28,6 @@ import {
   createRingingMedia,
   type RingingMediaViewModel,
 } from "../state/media/RingingMediaViewModel";
-import { type MuteStates } from "../state/MuteStates";
 
 global.IntersectionObserver = class MockIntersectionObserver {
   public observe(): void {}
@@ -66,6 +65,7 @@ test("SpotlightTile is accessible", async () => {
       onToggleExpanded={toggleExpanded}
       showIndicators
       showNameTags
+      showRingingStatus
       focusable={true}
     />,
   );
@@ -108,6 +108,7 @@ test("Screen share volume UI is shown when screen share has audio", async () => 
         onToggleExpanded={toggleExpanded}
         showIndicators
         showNameTags
+        showRingingStatus
         focusable
       />
     </TooltipProvider>,
@@ -138,6 +139,7 @@ test("Screen share volume UI is hidden when screen share has no audio", async ()
       onToggleExpanded={toggleExpanded}
       showIndicators
       showNameTags
+      showRingingStatus
       focusable
     />,
   );
@@ -156,10 +158,8 @@ test("SpotlightTile displays ringing media", async () => {
   >("ringing");
   const vm = createRingingMedia({
     pickupState$,
-    muteStates: {
-      video: { enabled$: constant(false) },
-    } as unknown as MuteStates,
     id: "test",
+    intent: "audio",
     userId: "@alice:example.org",
     displayName$: constant("Alice"),
     mxcAvatarUrl$: constant(undefined),
@@ -175,6 +175,7 @@ test("SpotlightTile displays ringing media", async () => {
       onToggleExpanded={toggleExpanded}
       showIndicators
       showNameTags
+      showRingingStatus
       focusable={true}
     />,
   );

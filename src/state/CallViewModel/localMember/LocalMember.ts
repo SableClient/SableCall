@@ -55,7 +55,6 @@ import { ElementWidgetActions, widget } from "../../../widget.ts";
 import { getUrlParams } from "../../../UrlParams.ts";
 import { PosthogAnalytics } from "../../../analytics/PosthogAnalytics.ts";
 import {
-  MatrixRTCMode,
   advancedScreenShare,
   screenShareResolution,
   screenShareFramerate,
@@ -63,6 +62,7 @@ import {
   screenShareCodec,
   parseResolution,
 } from "../../../settings/settings.ts";
+import { MatrixRTCMode } from "../../../config/ConfigOptions.ts";
 import { Config } from "../../../config/Config.ts";
 import {
   ConnectionState,
@@ -179,7 +179,7 @@ export const createLocalMembership$ = ({
   logger: parentLogger,
   muteStates,
   matrixRTCSession,
-  roomId: roomId,
+  roomId,
 }: Props): {
   /**
    * This request to start audio and video tracks.

@@ -15,6 +15,7 @@ import {
 } from "livekit-client";
 import { type Room as MatrixRoom } from "matrix-js-sdk";
 import {
+  BehaviorSubject,
   catchError,
   combineLatest,
   distinctUntilChanged,
@@ -28,7 +29,6 @@ import {
   pairwise,
   race,
   scan,
-  skipWhile,
   startWith,
   Subject,
   switchAll,
@@ -38,7 +38,7 @@ import {
   tap,
   throttleTime,
   timer,
-  BehaviorSubject,
+  takeUntil,
 } from "rxjs";
 import { logger as rootLogger } from "matrix-js-sdk/lib/logger";
 import {
@@ -61,7 +61,6 @@ import {
 import {
   duplicateTiles,
   echoCancellationSetting,
-  MatrixRTCMode,
   noiseSuppressionSetting,
   playReactionsSound,
   rnnoiseNoiseSuppression,
@@ -69,6 +68,8 @@ import {
 } from "../../settings/settings";
 import { shouldEnableNativeNoiseSuppression } from "../../audio/noiseSuppressionPolicy";
 import { supportsRNNoiseProcessor } from "../../audio/RNNoiseProcessor";
+import { Config } from "../../config/Config";
+import { MatrixRTCMode } from "../../config/ConfigOptions";
 import { isFirefox, platform } from "../../Platform";
 import { setPipEnabled$ } from "../../controls";
 import { TileStore } from "../TileStore";
@@ -129,10 +130,9 @@ import {
   createConnectionManager$,
 } from "./remoteMembers/ConnectionManager.ts";
 import {
-  createMatrixLivekitMembers$,
+  createRemoteMatrixLivekitMembers$,
   type LocalMatrixLivekitMember,
   type RemoteMatrixLivekitMember,
-  type MatrixLivekitMember,
 } from "./remoteMembers/MatrixLivekitMembers.ts";
 import {
   type AutoLeaveReason,
@@ -160,6 +160,7 @@ import {
   createRingingMedia,
   type RingingMediaViewModel,
 } from "../media/RingingMediaViewModel.ts";
+import { type GridTileViewModel } from "../TileViewModel.ts";
 
 const logger = rootLogger.getChild("[CallViewModel]");
 //TODO
@@ -234,9 +235,13 @@ export interface CallViewModel {
   // lifecycle
   autoLeave$: Observable<AutoLeaveReason>;
   /**
-   * Whether we are ringing a call recipient.
+   * View model for info relating to ringing, timing out, calling back, etc.
    */
-  ringing$: Behavior<boolean>;
+  ringingVm$: Behavior<RingingMediaViewModel | null>;
+  /**
+   * Which visual element the ringing status should be shown in.
+   */
+  ringingStatusLocation: "app_bar" | "tile";
   /** Observable that emits when the user should leave the call (hangup pressed, widget action, error).
    * THIS DOES NOT LEAVE THE CALL YET. The only way to leave the call (send the hangup event) is
    *  - by ending the scope
@@ -304,7 +309,7 @@ export interface CallViewModel {
   /** Participants sorted by livekit room so they can be used in the audio rendering */
   livekitRoomItems$: Behavior<LivekitRoomItem[]>;
   /** use the layout instead, this is just for the sdk export. */
-  matrixLivekitMembers$: Behavior<RemoteMatrixLivekitMember[]>;
+  remoteMatrixLivekitMembers$: Behavior<RemoteMatrixLivekitMember[]>;
   localMatrixLivekitMember$: Behavior<LocalMatrixLivekitMember | null>;
   /** List of participants raising their hand */
   handsRaised$: Behavior<Record<string, RaisedHandInfo>>;
@@ -360,6 +365,9 @@ export interface CallViewModel {
    * and header as overlays.
    */
   edgeToEdge$: Behavior<boolean>;
+
+  settingsOpen$: Behavior<boolean>;
+  setSettingsOpen$: Behavior<(open: boolean) => void>;
 
   // audio routing
   /**
@@ -418,8 +426,15 @@ export function createCallViewModel$(
     options.encryptionSystem,
     matrixRTCSession,
   );
+  // matrix_rtc_mode in config.json overrides the user's Developer Settings choice.
+  // It is validated at config load (src/config/Config.ts) so the cast is safe.
+  const configMatrixRTCMode = Config.get().matrix_rtc_mode as
+    | MatrixRTCMode
+    | undefined;
   const matrixRTCMode$ =
-    options.matrixRTCMode$ ?? constant(MatrixRTCMode.Legacy);
+    configMatrixRTCMode !== undefined
+      ? constant(configMatrixRTCMode)
+      : (options.matrixRTCMode$ ?? constant(MatrixRTCMode.Legacy));
 
   // Each hbar seperates a block of input variables required for the CallViewModel to function.
   // The outputs of this block is written under the hbar.
@@ -525,13 +540,15 @@ export function createCallViewModel$(
     ownMembershipIdentity,
   });
 
-  const matrixLivekitMembers$: Behavior<Epoch<RemoteMatrixLivekitMember[]>> =
-    createMatrixLivekitMembers$({
-      scope: scope,
-      membershipsWithTransport$:
-        membershipsAndTransports.membershipsWithTransport$,
-      connectionManager: connectionManager,
-    });
+  const remoteMatrixLivekitMembers$: Behavior<
+    Epoch<RemoteMatrixLivekitMember[]>
+  > = createRemoteMatrixLivekitMembers$({
+    scope: scope,
+    membershipsWithTransport$:
+      membershipsAndTransports.membershipsWithTransport$,
+    connectionManager: connectionManager,
+    localUser: { userId, deviceId },
+  });
 
   const connectOptions$ = scope.behavior(
     matrixRTCMode$.pipe(
@@ -608,19 +625,12 @@ export function createCallViewModel$(
       ),
     );
 
-  // ------------------------------------------------------------------------
-  // callLifecycle
-
-  // TODO if we are in "unknown" state we need a loading rendering (or empty screen)
-  // Otherwise it looks like we already connected and only than the ringing starts which is weird.
-  const { callPickupState$, autoLeave$ } = createCallNotificationLifecycle$({
-    scope: scope,
-    memberships$: memberships$,
-    sentCallNotification$: createSentCallNotification$(scope, matrixRTCSession),
-    receivedDecline$: createReceivedDecline$(matrixRoom),
-    options: options,
-    localUser: { userId: userId, deviceId: deviceId },
-  });
+  const matrixLivekitMembers$ = scope.behavior(
+    combineLatest(
+      [localMatrixLivekitMember$, remoteMatrixLivekitMembers$],
+      (local, remote) => [...(local === null ? [] : [local]), ...remote.value],
+    ),
+  );
 
   // ------------------------------------------------------------------------
   // matrixMemberMetadataStore
@@ -632,11 +642,26 @@ export function createCallViewModel$(
     matrixRoomMembers$,
   );
 
+  // ------------------------------------------------------------------------
+  // callLifecycle
+
+  // TODO if we are in "unknown" state we need a loading rendering (or empty screen)
+  // Otherwise it looks like we already connected and only than the ringing starts which is weird.
+  const { ringAttempts$, autoLeave$ } = createCallNotificationLifecycle$({
+    scope,
+    memberships$,
+    matrixRoomMembers$,
+    sentCallNotification$: createSentCallNotification$(scope, matrixRTCSession),
+    receivedDecline$: createReceivedDecline$(matrixRoom),
+    options,
+    localUser: { userId, deviceId },
+  });
+
   const allConnections$ = scope.behavior(
     connectionManager.connectionManagerData$.pipe(map((d) => d.value)),
   );
   const livekitRoomItems$ = scope.behavior(
-    matrixLivekitMembers$.pipe(
+    remoteMatrixLivekitMembers$.pipe(
       switchMap((members) => {
         const a$ = combineLatest(
           members.value.map((member) =>
@@ -702,43 +727,20 @@ export function createCallViewModel$(
    * List of user media (camera feeds) that we want tiles for.
    */
   const userMedia$ = scope.behavior<WrappedUserMediaViewModel[]>(
-    combineLatest([
-      localMatrixLivekitMember$,
-      matrixLivekitMembers$,
-      duplicateTiles.value$,
-    ]).pipe(
+    combineLatest([matrixLivekitMembers$, duplicateTiles.value$]).pipe(
       // Generate a collection of user media from the list of expected (whether
       // present or missing) LiveKit participants.
       generateItems(
         "CallViewModel userMedia$",
-        function* ([
-          localMatrixLivekitMember,
-          matrixLivekitMembers,
-          duplicateTiles,
-        ]) {
-          const computeMediaId = (m: MatrixLivekitMember): string =>
-            `${m.userId}:${m.membership$.value.deviceId}`;
-
-          const localUserMediaId = localMatrixLivekitMember
-            ? computeMediaId(localMatrixLivekitMember)
-            : undefined;
-
-          const localAsArray = localMatrixLivekitMember
-            ? [localMatrixLivekitMember]
-            : [];
-          const remoteWithoutLocal = matrixLivekitMembers.value.filter(
-            (m) => computeMediaId(m) !== localUserMediaId,
-          );
-          const allMatrixLivekitMembers = [
-            ...localAsArray,
-            ...remoteWithoutLocal,
-          ];
-
-          for (const matrixLivekitMember of allMatrixLivekitMembers) {
-            const { userId, participant, connection$, membership$ } =
-              matrixLivekitMember;
-            const rtcId = membership$.value.rtcBackendIdentity; // rtcBackendIdentity
-            const mediaId = computeMediaId(matrixLivekitMember);
+        function* ([members, duplicateTiles]) {
+          for (const {
+            userId,
+            participant,
+            connection$,
+            membership$,
+          } of members) {
+            const rtcId = membership$.value.rtcBackendIdentity;
+            const mediaId = `${userId}:${membership$.value.deviceId}`;
             for (let dup = 0; dup < 1 + duplicateTiles; dup++) {
               yield {
                 keys: [dup, mediaId, userId, participant, connection$, rtcId],
@@ -764,11 +766,13 @@ export function createCallViewModel$(
             pretendToBeDisconnected$: localMembership.reconnecting$,
             displayName$: scope.behavior(
               matrixMemberMetadataStore
-                .createDisplayNameBehavior$(userId)
+                .createDisplayNameBehavior$(scope, userId)
                 .pipe(map((name) => name ?? userId)),
             ),
-            mxcAvatarUrl$:
-              matrixMemberMetadataStore.createAvatarUrlBehavior$(userId),
+            mxcAvatarUrl$: matrixMemberMetadataStore.createAvatarUrlBehavior$(
+              scope,
+              userId,
+            ),
             handRaised$: scope.behavior(
               handsRaised$.pipe(map((v) => v[mediaId]?.time ?? null)),
             ),
@@ -780,49 +784,42 @@ export function createCallViewModel$(
     ),
   );
 
-  const ringingMedia$ = scope.behavior<RingingMediaViewModel[]>(
-    combineLatest([userMedia$, matrixRoomMembers$, callPickupState$]).pipe(
-      generateItems(
-        "CallViewModel ringingMedia$",
-        function* ([userMedia, roomMembers, callPickupState]) {
-          if (
-            callPickupState === "ringing" ||
-            callPickupState === "timeout" ||
-            callPickupState === "decline"
-          ) {
-            // TODO: Respect io.element.functional_members
-            for (const member of roomMembers.values()) {
-              if (!userMedia.some((vm) => vm.userId === member.userId))
-                yield {
-                  keys: [member.userId],
-                  data: callPickupState,
-                };
-            }
-          }
-        },
-        (scope, pickupState$, userId) =>
-          createRingingMedia({
-            id: `ringing:${userId}`,
-            userId,
-            displayName$: scope.behavior(
-              matrixRoomMembers$.pipe(
-                map((members) => members.get(userId)?.rawDisplayName || userId),
-              ),
-            ),
-            mxcAvatarUrl$:
-              matrixMemberMetadataStore.createAvatarUrlBehavior$(userId),
-            pickupState$,
-            muteStates,
-          }),
+  const ringingMedia$ = scope.behavior<RingingMediaViewModel | null>(
+    ringAttempts$.pipe(
+      switchMap(({ intent, recipient, outcome$ }) =>
+        outcome$.pipe(
+          startWith("ringing" as const),
+          generateItems(
+            "CallViewModel ringingMedia$",
+            function* (pickupState) {
+              if (pickupState !== "accept")
+                yield { keys: [intent, recipient], data: pickupState };
+            },
+            (scope, pickupState$, intent, userId) =>
+              createRingingMedia({
+                id: `ringing:${userId}`,
+                userId,
+                displayName$: scope.behavior(
+                  matrixRoomMembers$.pipe(
+                    map(
+                      (members) =>
+                        members.get(userId)?.rawDisplayName || userId,
+                    ),
+                  ),
+                ),
+                mxcAvatarUrl$:
+                  matrixMemberMetadataStore.createAvatarUrlBehavior$(
+                    scope,
+                    userId,
+                  ),
+                pickupState$,
+                intent,
+              }),
+          ),
+          map(([media]) => media ?? null),
+        ),
       ),
-      distinctUntilChanged(shallowEquals),
-      tap((ringingMedia) => {
-        if (ringingMedia.length > 1)
-          // Warn that UI may do something unexpected in this case
-          logger.warn(
-            `Ringing more than one participant is not supported (ringing ${ringingMedia.map((vm) => vm.userId).join(", ")})`,
-          );
-      }),
+      startWith(null),
     ),
   );
 
@@ -861,14 +858,10 @@ export function createCallViewModel$(
    *    multiple devices.
    */
   const participantCount$ = scope.behavior(
-    matrixLivekitMembers$.pipe(map((ms) => ms.value.length)),
+    matrixLivekitMembers$.pipe(map((ms) => ms.length)),
   );
 
-  const leaveSoundEffect$ = combineLatest([callPickupState$, userMedia$]).pipe(
-    // Until the call is successful, do not play a leave sound.
-    // If callPickupState$ is null, then we always play the sound as it will not conflict with a decline sound.
-    skipWhile(([c]) => c !== null && c !== "success"),
-    map(([, userMedia]) => userMedia),
+  const leaveSoundEffect$ = userMedia$.pipe(
     pairwise(),
     filter(
       ([prev, current]) =>
@@ -877,6 +870,9 @@ export function createCallViewModel$(
     ),
     map(() => {}),
     throttleTime(THROTTLE_SOUND_EFFECT_MS),
+    // Avoid doubling up on any auto-leave sounds (e.g. the decline sound),
+    // which are handled elsewhere
+    takeUntil(autoLeave$),
   );
 
   const userHangup$ = new Subject<void>();
@@ -955,8 +951,8 @@ export function createCallViewModel$(
   );
 
   /**
-   * Local user media suitable for displaying in a PiP (undefined if not found
-   * or if user prefers to not see themselves).
+   * Local user media suitable for displaying in a PiP (undefined if not found,
+   * video is muted, or if user prefers to not see themselves).
    */
   const localUserMediaForPip$ = scope.behavior<
     LocalUserMediaViewModel | undefined
@@ -968,8 +964,10 @@ export function createCallViewModel$(
             m.type === "user" && m.local,
         );
         if (!localUserMedia) return of(undefined);
-        return localUserMedia.alwaysShow$.pipe(
-          map((alwaysShow) => (alwaysShow ? localUserMedia : undefined)),
+        return combineLatest(
+          [localUserMedia.videoEnabled$, localUserMedia.alwaysShow$],
+          (videoEnabled, alwaysShow) =>
+            videoEnabled && alwaysShow ? localUserMedia : undefined,
         );
       }),
     ),
@@ -981,8 +979,8 @@ export function createCallViewModel$(
   }>(
     ringingMedia$.pipe(
       switchMap((ringingMedia) => {
-        if (ringingMedia.length > 0)
-          return of({ spotlight: ringingMedia, pip$: localUserMediaForPip$ });
+        if (ringingMedia !== null)
+          return of({ spotlight: [ringingMedia], pip$: localUserMediaForPip$ });
 
         return screenShares$.pipe(
           switchMap((screenShares) => {
@@ -1079,10 +1077,12 @@ export function createCallViewModel$(
     }),
   );
 
-  const spotlightLandscapeLayoutMedia$: Observable<SpotlightLandscapeLayoutMedia> =
+  const spotlightLandscapeLayoutMedia$ = (
+    edgeToEdge: boolean,
+  ): Observable<SpotlightLandscapeLayoutMedia> =>
     combineLatest([grid$, spotlight$], (grid, spotlight) => ({
       type: "spotlight-landscape",
-      edgeToEdge: false,
+      edgeToEdge,
       spotlight,
       grid,
     }));
@@ -1136,14 +1136,10 @@ export function createCallViewModel$(
           // show ringing media instead
           if (userMedia.length === 1)
             return ringingMedia$.pipe(
-              map((ringingMedia) => {
-                return ringingMedia.length === 1
-                  ? {
-                      local,
-                      remote: ringingMedia[0],
-                    }
-                  : null;
-              }),
+              map(
+                (ringingMedia) =>
+                  ringingMedia && { local, remote: ringingMedia },
+              ),
             );
         }
       }
@@ -1195,6 +1191,33 @@ export function createCallViewModel$(
     })),
   );
 
+  spotlight$
+    .pipe(
+      switchMap((media) => {
+        let layout;
+        const pipMedia = media[0];
+        if (pipMedia === undefined) return of(undefined);
+        switch (pipMedia.type) {
+          case "user":
+            layout = pipMedia.videoOrientation$;
+            break;
+          case "ringing":
+            layout = of("landscape" as const);
+            break;
+          case "screen share":
+            layout = of("landscape" as const);
+            break;
+        }
+        return layout;
+      }),
+      scope.bind(),
+    )
+    .subscribe((orientation) => {
+      if (orientation === undefined) return;
+      logger.info("controls api pip orientation updated:", orientation);
+      window.controls.onPipMediaOrientationUpdate?.(orientation);
+    });
+
   /**
    * The media to be used to produce a layout.
    */
@@ -1217,7 +1240,7 @@ export function createCallViewModel$(
                       switchMap((expanded) =>
                         expanded
                           ? spotlightExpandedLayoutMedia$(false)
-                          : spotlightLandscapeLayoutMedia$,
+                          : spotlightLandscapeLayoutMedia$(false),
                       ),
                     );
                 }
@@ -1243,7 +1266,7 @@ export function createCallViewModel$(
                   case "grid":
                     // Yes, grid mode actually gets you a "spotlight" layout in
                     // this window mode.
-                    return spotlightLandscapeLayoutMedia$;
+                    return spotlightLandscapeLayoutMedia$(true);
                   case "spotlight":
                     return spotlightExpandedLayoutMedia$(true);
                 }
@@ -1350,6 +1373,10 @@ export function createCallViewModel$(
         // Layout is edge-to-edge; show/hide the footer in response to interactions
         return windowMode$.pipe(
           switchMap((mode) => {
+            if (mode === "pip" && platform !== "desktop") {
+              // No controls are shown in mobile pip as interactions are disabled
+              return of(false);
+            }
             const showInitially = mode !== "flat";
             const timeout$ = mode === "flat" ? timer(showFooterMs) : NEVER;
 
@@ -1400,12 +1427,16 @@ export function createCallViewModel$(
       map((naturallyShowFooter) => naturallyShowFooter && showFooterUrlParams),
     ),
   );
+  const settingsOpen$ = new BehaviorSubject(false);
+  const setSettingsOpen$ = constant((open: boolean) => {
+    settingsOpen$.next(open);
+  });
 
   const showHeader$ = scope.behavior<boolean>(
     windowMode$.pipe(
       switchMap((mode) => {
         // In small windows the header would be too obstructive
-        if (mode === "pip" || mode === "flat") return of(false);
+        if (mode === "pip") return of(false);
         // In edge-to-edge layouts, couple the visibility of the header
         // to that of the footer
         return edgeToEdge$.pipe(
@@ -1463,6 +1494,7 @@ export function createCallViewModel$(
         ({ tiles: prevTiles }, [media, visibleTiles]) => {
           let layout: Layout;
           let newTiles: TileStore;
+          let pip: GridTileViewModel | undefined;
           switch (media.type) {
             case "grid":
             case "spotlight-landscape":
@@ -1488,6 +1520,7 @@ export function createCallViewModel$(
                 landscapePipAlignment$,
                 prevTiles,
               );
+              pip = layout.pip;
               break;
             case "one-on-one-portrait":
               [layout, newTiles] = oneOnOnePortraitLayout(
@@ -1496,10 +1529,15 @@ export function createCallViewModel$(
                 portraitPipAlignment$,
                 prevTiles,
               );
+              pip = layout.pip;
               break;
             case "pip":
               [layout, newTiles] = pipLayout(media, prevTiles);
               break;
+          }
+
+          for (const tile of newTiles.gridTiles) {
+            tile.setShowOutline(tile === pip);
           }
 
           return { layout, tiles: newTiles };
@@ -1685,9 +1723,9 @@ export function createCallViewModel$(
 
   return {
     autoLeave$: autoLeave$,
-    ringing$: scope.behavior(
-      callPickupState$.pipe(map((state) => state === "ringing")),
-    ),
+    ringingVm$: ringingMedia$,
+    ringingStatusLocation:
+      urlParams.header === HeaderStyle.AppBar ? "app_bar" : "tile",
     leave$: leave$,
     hangup: (): void => userHangup$.next(),
     join: localMembership.requestJoinAndPublish,
@@ -1732,8 +1770,8 @@ export function createCallViewModel$(
     setGridMode: setGridMode,
     layout$: layout$,
     localMatrixLivekitMember$,
-    matrixLivekitMembers$: scope.behavior(
-      matrixLivekitMembers$.pipe(
+    remoteMatrixLivekitMembers$: scope.behavior(
+      remoteMatrixLivekitMembers$.pipe(
         map((members) => members.value),
         tap((v) => {
           const listForLogs = v
@@ -1754,6 +1792,8 @@ export function createCallViewModel$(
     showNameTags$,
     showHeader$: showHeader$,
     showFooter$: showFooter$,
+    settingsOpen$: settingsOpen$,
+    setSettingsOpen$: setSettingsOpen$,
     edgeToEdge$,
     earpieceMode$: earpieceMode$,
     audioOutputSwitcher$: audioOutputSwitcher$,

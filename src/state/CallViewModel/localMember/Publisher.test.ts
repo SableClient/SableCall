@@ -82,6 +82,7 @@ function createMockLocalTrack(source: Track.Source): LocalTrack {
 
 function createMockMuteState(enabled$: BehaviorSubject<boolean>): {
   enabled$: BehaviorSubject<boolean>;
+  syncing$: BehaviorSubject<boolean>;
   setHandler: (h: (enabled: boolean) => void) => void;
   unsetHandler: () => void;
 } {
@@ -89,6 +90,7 @@ function createMockMuteState(enabled$: BehaviorSubject<boolean>): {
 
   const ms = {
     enabled$,
+    syncing$: new BehaviorSubject(false),
     setHandler: vi.fn().mockImplementation((h: (enabled: boolean) => void) => {
       currentHandler = h;
     }),
@@ -151,6 +153,7 @@ beforeEach(() => {
       disconnectOnPageLeave: true,
     },
     new Map(),
+    {},
     {},
     {},
   );
