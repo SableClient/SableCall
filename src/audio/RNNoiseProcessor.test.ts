@@ -184,6 +184,7 @@ function instantiateWorkletProcessor(workletCode: string): {
     },
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const runWorkletModule = new Function(
     "AudioWorkletProcessor",
     "registerProcessor",

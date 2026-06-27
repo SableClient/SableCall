@@ -2,7 +2,7 @@ name: Lint, format & type check
 on:
   pull_request: {}
 jobs:
-  lint:
+  prettier:
     name: Lint, format & type check
     runs-on: ubuntu-latest
     steps:
@@ -10,23 +10,24 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - name: pnpm cache
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           cache: "pnpm"
           node-version-file: ".node-version"
       - name: Install dependencies
-        # ignore-pnpmfile should never be commited. Make CI crash if it happened (`pnpmfileChecksum` is present)
-        run: "pnpm install --frozen-lockfile --ignore-pnpmfile"
-      - name: Formatting
+        run: "pnpm install --frozen-lockfile"
+      - name: format check
         run: "pnpm run format:check"
-      - name: i18n
+      - name: i18n check
         run: "pnpm run i18n:check"
-      - name: Lint
+      - name: oxlint
         run: "pnpm run lint:oxlint"
-      - name: Type check
+      - name: tsc
         run: "pnpm run lint:types"
-      - name: Dead code analysis
+      - name: knip
         run: "pnpm run lint:knip"

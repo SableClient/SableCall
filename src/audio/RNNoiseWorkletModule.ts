@@ -72,9 +72,7 @@ const PRESETS: Record<RNNoiseSuppressionPreset, PresetConfig> = {
   },
 };
 
-function isPreset(
-  preset: unknown,
-): preset is keyof typeof PRESETS & RNNoiseSuppressionPreset {
+function isPreset(preset: unknown): preset is RNNoiseSuppressionPreset {
   return typeof preset === "string" && preset in PRESETS;
 }
 

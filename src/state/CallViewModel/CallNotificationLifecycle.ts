@@ -20,7 +20,6 @@ import {
   NEVER,
   type Observable,
   of,
-  pairwise,
   switchMap,
   timer,
   EMPTY,
@@ -172,14 +171,22 @@ export function createCallNotificationLifecycle$({
       scope.share,
     );
 
+  let hasOthersJoined = false;
   const allOthersLeft$ = memberships$.pipe(
-    pairwise(),
-    filter(
-      ([{ value: prev }, { value: current }]) =>
-        current.every((m) => m.userId === localUser.userId) &&
-        prev.some((m) => m.userId !== localUser.userId),
-    ),
-    map(() => {}),
+    switchMap(({ value: current }) => {
+      const hasOthers = current.some((m) => m.userId !== localUser.userId);
+      if (hasOthers) {
+        hasOthersJoined = true;
+        return NEVER;
+      }
+      if (
+        hasOthersJoined &&
+        current.every((m) => m.userId === localUser.userId)
+      ) {
+        return timer(180000).pipe(map(() => "allOthersLeft" as const));
+      }
+      return NEVER;
+    }),
   );
 
   const autoLeave$ = merge(
@@ -189,7 +196,7 @@ export function createCallNotificationLifecycle$({
     ringAttempts$.pipe(
       switchMap(({ outcome$ }) =>
         outcome$.pipe(
-          filter((outcome) => outcome === "timeout" || outcome === "decline"),
+          filter((outcome) => outcome === "decline"), // Removed 'timeout' so ring timeouts don't hang up
         ),
       ),
     ),

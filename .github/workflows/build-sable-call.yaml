@@ -1,4 +1,4 @@
-name: Build Element Call
+name: Build Sable Call
 on:
   workflow_call:
     inputs:
@@ -28,7 +28,7 @@ on:
 
 jobs:
   build:
-    name: Build Element Call
+    name: Build Sable Call
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -37,15 +37,18 @@ jobs:
           persist-credentials: false
       - name: Enable Corepack
         run: corepack enable
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - name: pnpm cache
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           cache: "pnpm"
           node-version-file: ".node-version"
       - name: Install dependencies
-        # ignore-pnpmfile should never be commited. Make CI crash if it happened (`pnpmfileChecksum` is present)
-        run: "pnpm install --frozen-lockfile --ignore-pnpmfile"
-      - name: Build Element Call
+        run: "pnpm install --frozen-lockfile"
+      - name: Build Sable Call
         run: pnpm run build:"$PACKAGE":"$BUILD_MODE"
         env:
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
