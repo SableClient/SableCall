@@ -48,8 +48,6 @@ export type ValidClientState = {
   disconnected: boolean;
   supportedFeatures: {
     reactions: boolean;
-    thumbnails: boolean;
-    mediaProxy: boolean;
   };
   setClient: (client: MatrixClient, session: Session) => void;
 };
@@ -250,8 +248,6 @@ export const ClientProvider: FC<Props> = ({ children }) => {
 
   const [isDisconnected, setIsDisconnected] = useState(false);
   const [supportsReactions, setSupportsReactions] = useState(false);
-  const [supportsThumbnails, setSupportsThumbnails] = useState(false);
-  const [supportsMediaProxy, setSupportsMediaProxy] = useState(false);
 
   const state: ClientState | undefined = useMemo(() => {
     if (alreadyOpenedErr) {
@@ -277,8 +273,6 @@ export const ClientProvider: FC<Props> = ({ children }) => {
       disconnected: isDisconnected,
       supportedFeatures: {
         reactions: supportsReactions,
-        thumbnails: supportsThumbnails,
-        mediaProxy: supportsMediaProxy,
       },
     };
   }, [
@@ -289,8 +283,6 @@ export const ClientProvider: FC<Props> = ({ children }) => {
     setClient,
     isDisconnected,
     supportsReactions,
-    supportsThumbnails,
-    supportsMediaProxy,
   ]);
 
   const onSync = useCallback(
@@ -316,17 +308,6 @@ export const ClientProvider: FC<Props> = ({ children }) => {
     }
 
     if (initClientState.widgetApi) {
-      const hasMediaProxy = initClientState.widgetApi.hasCapability(
-        "moe.sable.media_proxy",
-      );
-      const hasThumbnails = initClientState.widgetApi.hasCapability(
-        "moe.sable.thumbnails",
-      );
-      // maybe slightly weird to do it this way.
-      // if there's ever media besides thumbnails in the future
-      // these ought to to be decoupled
-      setSupportsThumbnails(hasThumbnails || hasMediaProxy);
-      setSupportsMediaProxy(hasMediaProxy);
       const reactSend = initClientState.widgetApi.hasCapability(
         "org.matrix.msc2762.send.event:m.reaction",
       );
@@ -347,7 +328,6 @@ export const ClientProvider: FC<Props> = ({ children }) => {
         setSupportsReactions(true);
       }
     } else {
-      setSupportsThumbnails(true);
       setSupportsReactions(true);
     }
 

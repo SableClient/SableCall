@@ -19,10 +19,8 @@ import { widget } from "./widget";
 const TestComponent: FC<
   PropsWithChildren<{
     client: MatrixClient;
-    supportsThumbnails?: boolean;
-    mediaProxy?: boolean;
   }>
-> = ({ client, children, supportsThumbnails, mediaProxy }) => {
+> = ({ client, children }) => {
   return (
     <ClientContextProvider
       value={{
@@ -30,8 +28,6 @@ const TestComponent: FC<
         disconnected: false,
         supportedFeatures: {
           reactions: true,
-          thumbnails: supportsThumbnails ?? true,
-          mediaProxy: mediaProxy ?? false,
         },
         setClient: vi.fn(),
         authenticated: {
