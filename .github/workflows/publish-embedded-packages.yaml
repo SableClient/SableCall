@@ -3,13 +3,7 @@ name: Build & publish embedded packages for releases
 on:
   release:
     types: [published]
-  pull_request:
-    types:
-      - synchronize
-      - opened
-      - labeled
-  push:
-    branches: [livekit]
+  workflow_dispatch:
 
 jobs:
   versioning:
