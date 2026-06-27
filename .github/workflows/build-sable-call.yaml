@@ -39,8 +39,6 @@ jobs:
         run: corepack enable
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
-        with:
-          version: 9
       - name: pnpm cache
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -67,3 +65,4 @@ jobs:
           path: dist
           # We'll only use this in a triggered job, then we're done with it
           retention-days: 1
+

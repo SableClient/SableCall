@@ -168,3 +168,4 @@ jobs:
             ```
             npm install @sableclient/sable-call-embedded@${{ needs.publish_npm.outputs.ARTIFACT_VERSION }}
             ```
+
