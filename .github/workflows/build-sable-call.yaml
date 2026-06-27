@@ -26,6 +26,8 @@ on:
       CODECOV_TOKEN:
         required: false
 
+env:
+  PNPM_CONFIG_PM_ON_FAIL: ignore
 jobs:
   build:
     name: Build Sable Call

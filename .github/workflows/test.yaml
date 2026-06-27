@@ -4,6 +4,8 @@ on:
   pull_request: {}
   push:
     branches: [livekit, full-mesh]
+env:
+  PNPM_CONFIG_PM_ON_FAIL: ignore
 jobs:
   vitest:
     name: Run unit tests

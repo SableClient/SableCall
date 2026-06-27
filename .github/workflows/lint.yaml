@@ -1,6 +1,8 @@
 name: Lint, format & type check
 on:
   pull_request: {}
+env:
+  PNPM_CONFIG_PM_ON_FAIL: ignore
 jobs:
   prettier:
     name: Lint, format & type check
