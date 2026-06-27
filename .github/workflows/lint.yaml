@@ -31,4 +31,3 @@ jobs:
         run: "pnpm run lint:types"
       - name: knip
         run: "pnpm run lint:knip"
-
