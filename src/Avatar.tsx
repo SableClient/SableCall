@@ -14,8 +14,10 @@ import {
 } from "react";
 import { Avatar as CompoundAvatar } from "@vector-im/compound-web";
 import { type MatrixClient } from "matrix-js-sdk";
+import { type WidgetApi } from "matrix-widget-api";
 
 import { useClientState } from "./ClientContext";
+import { widget } from "./widget";
 
 export enum Size {
   XS = "xs",
@@ -46,7 +48,6 @@ export function getAvatarUrl(
   client: MatrixClient,
   mxcUrl: string | null,
   avatarSize = 96,
-  useAuthentication = true,
 ): string | null {
   const width = Math.floor(avatarSize * window.devicePixelRatio);
   const height = Math.floor(avatarSize * window.devicePixelRatio);
@@ -60,7 +61,7 @@ export function getAvatarUrl(
         resizeMethod,
         false,
         true,
-        useAuthentication,
+        true,
       )
     : null;
 }
@@ -79,51 +80,54 @@ export const Avatar: FC<Props> = ({
   const sizePx = useMemo(
     () =>
       Object.values(Size).includes(size as Size)
-        ? sizes.get(size as Size)
+        ? sizes.get(size as Size)!
         : (size as number),
     [size],
   );
 
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
 
+  // In theory, a change in `clientState` or `sizePx` could run extra getAvatarFromWidgetAPI calls, but in practice they should be stable long before this code runs.
   useEffect(() => {
-    if (clientState?.state !== "valid") {
-      return;
-    }
-    const { authenticated, supportedFeatures } = clientState;
-    const client = authenticated?.client;
-
-    if (!client || !src || !sizePx || !supportedFeatures.thumbnails) {
+    if (!src) {
+      setAvatarUrl(undefined);
       return;
     }
 
-    const token = client.getAccessToken();
-    const useAuth = token != null || supportedFeatures.mediaProxy;
-    // if we have no auth, try to use old deprecated endpoint
-    const resolveSrc = getAvatarUrl(client, src, sizePx, useAuth);
-    if (!resolveSrc) {
+    let blob: Promise<Blob>;
+
+    if (widget?.api) {
+      blob = getAvatarFromWidgetAPI(widget.api, src);
+    } else if (
+      clientState?.state === "valid" &&
+      clientState.authenticated?.client &&
+      sizePx
+    ) {
+      blob = getAvatarFromServer(clientState.authenticated.client, src, sizePx);
+    } else {
       setAvatarUrl(undefined);
       return;
     }
 
     let objectUrl: string | undefined;
-    // attach token if we have one already.
-    // otherwise, we are using the unauthenticated endpoint
-    // or we are counting on the host to add it in
-    const fetchOpts: RequestInit = token
-      ? { headers: { Authorization: `Bearer ${token}` } }
-      : {};
-    fetch(resolveSrc, fetchOpts)
-      .then(async (req) => req.blob())
+    let stale = false;
+    blob
       .then((blob) => {
+        if (stale) {
+          return;
+        }
         objectUrl = URL.createObjectURL(blob);
         setAvatarUrl(objectUrl);
       })
       .catch((ex) => {
+        if (stale) {
+          return;
+        }
         setAvatarUrl(undefined);
       });
 
     return (): void => {
+      stale = true;
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }
@@ -142,3 +146,50 @@ export const Avatar: FC<Props> = ({
     />
   );
 };
+
+async function getAvatarFromServer(
+  client: MatrixClient,
+  src: string,
+  sizePx: number,
+): Promise<Blob> {
+  const httpSrc = getAvatarUrl(client, src, sizePx);
+  if (!httpSrc) {
+    throw new Error("Failed to get http avatar URL");
+  }
+
+  const token = client.getAccessToken();
+  if (!token) {
+    throw new Error("Failed to get access token");
+  }
+
+  const request = await fetch(httpSrc, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const blob = await request.blob();
+
+  return blob;
+}
+
+// export for testing
+export async function getAvatarFromWidgetAPI(
+  api: WidgetApi,
+  src: string,
+): Promise<Blob> {
+  const response = await api.downloadFile(src);
+  const file = response.file;
+
+  // element-web sends a Blob, and the MSC4039 is considering changing the spec to strictly Blob, so only handling that
+  if (file instanceof Blob) {
+    return file;
+  } else if (typeof file === "string") {
+    // it is a base64 string
+    const bytes = Uint8Array.from(atob(file), (c) => c.charCodeAt(0));
+    return new Blob([bytes]);
+  }
+  throw new Error(
+    "Downloaded file format is not supported: " + typeof file + "",
+  );
+}

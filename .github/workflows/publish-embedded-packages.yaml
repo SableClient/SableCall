@@ -3,13 +3,7 @@ name: Build & publish embedded packages for releases
 on:
   release:
     types: [published]
-  pull_request:
-    types:
-      - synchronize
-      - opened
-      - labeled
-  push:
-    branches: [livekit]
+  workflow_dispatch:
 
 jobs:
   versioning:
@@ -60,9 +54,9 @@ jobs:
             echo "TAG=other" >> "$GITHUB_OUTPUT"
           fi
 
-  build_element_call:
+  build_sable_call:
     needs: versioning
-    uses: ./.github/workflows/build-element-call.yaml
+    uses: ./.github/workflows/build-sable-call.yaml
     with:
       vite_app_version: embedded-${{ needs.versioning.outputs.PREFIXED_VERSION }}
       package: embedded
@@ -73,7 +67,7 @@ jobs:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
   publish_tarball:
-    needs: [build_element_call, versioning]
+    needs: [build_sable_call, versioning]
     if: always()
     name: Publish tarball
     runs-on: ubuntu-latest
@@ -104,7 +98,7 @@ jobs:
             ${{ env.FILENAME_PREFIX }}.sha256
 
   publish_npm:
-    needs: [build_element_call, versioning]
+    needs: [build_sable_call, versioning]
     if: always()
     name: Publish NPM
     runs-on: ubuntu-latest

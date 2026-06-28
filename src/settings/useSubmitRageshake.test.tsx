@@ -78,8 +78,6 @@ function renderWithMockClient(
         disconnected: false,
         supportedFeatures: {
           reactions: true,
-          thumbnails: true,
-          mediaProxy: false,
         },
         setClient: vi.fn(),
         authenticated: {

@@ -1,8 +1,11 @@
+# zizmor: ignore[unfenced-secrets]
 name: Test
 on:
   pull_request: {}
   push:
     branches: [livekit, full-mesh]
+env:
+  PNPM_CONFIG_PM_ON_FAIL: ignore
 jobs:
   vitest:
     name: Run unit tests
@@ -14,49 +17,55 @@ jobs:
           persist-credentials: false
       - name: Enable Corepack
         run: corepack enable
-      - name: Yarn cache
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - name: pnpm cache
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          cache: "yarn"
+          cache: "pnpm"
           node-version-file: ".node-version"
       - name: Install dependencies
-        run: "yarn install --immutable"
-      - name: Vitest
-        run: "yarn run test:coverage"
-      - name: Upload to codecov
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: "pnpm install --frozen-lockfile"
+      - name: Coverage
+        run: "pnpm run test:coverage"
+      # zizmor: ignore[unfenced-secrets]
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@13ce06bfc6bbe3ecf90edbbf1bc32fe5978ca1d3 # v5.3.1
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
         with:
-          flags: unittests
+          token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+          verbose: true
   playwright:
-    name: Run end-to-end tests
-    timeout-minutes: 60
+    name: Playwright Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
       - name: Enable Corepack
         run: corepack enable
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - name: pnpm cache
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          cache: "yarn"
+          cache: "pnpm"
           node-version-file: ".node-version"
       - name: Install dependencies
-        run: yarn install --immutable
-      - name: Install Playwright Browsers
-        run: yarn playwright install --with-deps
-      - name: Run backend components
+        run: pnpm install --frozen-lockfile
+      - name: Install playwright browsers
+        run: pnpm exec playwright install --with-deps
+      - name: Create local config
         run: |
-          docker compose -f playwright-backend-docker-compose.yml -f playwright-backend-docker-compose.override.yml pull
-          docker compose -f playwright-backend-docker-compose.yml -f playwright-backend-docker-compose.override.yml up -d
-          docker ps
+          cp config/sample.json public/config.json
+          jq '.features.livekit_allow_screenshare_on_active_sfu = true' public/config.json > public/config.json.tmp && mv public/config.json.tmp public/config.json
+          jq '.livekit_edge_url = "http://localhost:7880"' public/config.json > public/config.json.tmp && mv public/config.json.tmp public/config.json
       - name: Run Playwright tests
         env:
           USE_DOCKER: 1
-        run: yarn playwright test
+        run: pnpm exec playwright test
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ !cancelled() }}
         with:

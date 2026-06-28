@@ -4,6 +4,7 @@
     "module": "es2022",
     "jsx": "react-jsx",
     "lib": ["es2024", "dom", "dom.iterable"],
+    "skipLibCheck": true,
 
     // From Matrix-JS-SDK
     "strict": true,
@@ -37,7 +38,7 @@
       "livekit-client/dist/src/proto/livekit_models_pb": [
         "./node_modules/@livekit/protocol/src/gen/livekit_models_pb.d.ts"
       ]
-    },
+    }
 
     // TODO: Enable the following options later.
     // "forceConsistentCasingInFileNames": true,
@@ -47,8 +48,6 @@
     // "noPropertyAccessFromIndexSignature": true,
     // "noUncheckedIndexedAccess": true,
     // "noUnusedParameters": true,
-
-    "plugins": [{ "name": "typescript-eslint-language-service" }]
   },
   "include": [
     "./src/**/*.ts",

@@ -38,6 +38,8 @@ import { type ObservableScope } from "../ObservableScope";
 import { observeTrackReference$ } from "../observeTrackReference";
 import { E2eeType } from "../../e2ee/e2eeType";
 import { observeInboundRtpStreamStats$ } from "./observeRtpStreamStats";
+import { type UserMediaViewModel } from "./UserMediaViewModel";
+import { type ScreenShareViewModel } from "./ScreenShareViewModel";
 
 // TODO: Encryption status is kinda broken and thus unused right now. Remove?
 export enum EncryptionStatus {
@@ -49,9 +51,9 @@ export enum EncryptionStatus {
 }
 
 /**
- * Media belonging to an active member of the RTC session.
+ * Properties common to all MemberMediaViewModels.
  */
-export interface MemberMediaViewModel extends BaseMediaViewModel {
+export interface BaseMemberMediaViewModel extends BaseMediaViewModel {
   /**
    * The LiveKit video track for this media.
    */
@@ -88,8 +90,9 @@ export function createMemberMedia(
     encryptionSystem,
     ...inputs
   }: MemberMediaInputs,
-): MemberMediaViewModel {
+): BaseMemberMediaViewModel {
   const trackBehavior$ = (
+    scope: ObservableScope,
     source: Track.Source,
   ): Behavior<TrackReference | undefined> =>
     scope.behavior(
@@ -100,8 +103,8 @@ export function createMemberMedia(
       ),
     );
 
-  const audio$ = trackBehavior$(audioSource);
-  const video$ = trackBehavior$(videoSource);
+  const audio$ = trackBehavior$(scope, audioSource);
+  const video$ = trackBehavior$(scope, videoSource);
 
   return {
     ...createBaseMedia(inputs),
@@ -270,3 +273,8 @@ function observeRemoteTrackReceivingOkay$(
     startWith(undefined),
   );
 }
+
+/**
+ * Media belonging to an active member of the call.
+ */
+export type MemberMediaViewModel = UserMediaViewModel | ScreenShareViewModel;

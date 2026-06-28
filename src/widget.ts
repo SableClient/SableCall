@@ -21,7 +21,6 @@ import type { IWidgetApiRequest } from "matrix-widget-api";
 import { LazyEventEmitter } from "./LazyEventEmitter";
 import { getUrlParams } from "./UrlParams";
 import { Config } from "./config/Config";
-import { seedSettingsFromConfig } from "./settings/settings";
 import { ElementCallReactionEventType } from "./reactions";
 
 // Subset of the actions in element-web
@@ -62,7 +61,7 @@ export interface WidgetHelpers {
  * is initialized with `initializeWidget`. This should happen at the top level because the widget messaging
  * needs to be set up ASAP on load to ensure it doesn't miss any requests.
  */
-export let widget: WidgetHelpers | null;
+export let widget: WidgetHelpers | null = null;
 
 /**
  * Should be called as soon as possible on app start. (In the initilizer before react)
@@ -94,14 +93,7 @@ export const initializeWidget = (
       logger.info("Widget API is available");
       const api = new WidgetApi(widgetId, parentOrigin);
       api.requestCapability(MatrixCapabilities.AlwaysOnScreen);
-      // asks if it wants thumbnails at all. if this
-      // is on but media proxy isn't,
-      // will try on the unathenticated media endpoint for them
-      api.requestCapability("moe.sable.thumbnails");
-      // asks if it can support authenticated thumbnails via proxy
-      // this will enable thumbnails automatically for now
-      // as that's the only thing this would be used for anyway
-      api.requestCapability("moe.sable.media_proxy");
+      api.requestCapability(MatrixCapabilities.MSC4039DownloadFile);
 
       // Set up the lazy action emitter, but only for select actions that we
       // intend for the app to handle
@@ -203,7 +195,6 @@ export const initializeWidget = (
         // Wait for the config file to be ready (we load very early on so it might not
         // be otherwise)
         await Config.init();
-        seedSettingsFromConfig(Config.get().media_quality);
         await client.startClient({ clientWellKnownPollPeriod: 60 * 10 });
         return client;
       };

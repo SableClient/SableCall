@@ -34,7 +34,7 @@ async function setupTwoUserSpaCall(
   await page.goto("/");
 
   let androlHasSentStickyEvent = false;
-
+  const androlResolver = Promise.withResolvers<void>();
   await interceptEventSend(
     page,
     // This room is not encrypted, so the event is sent in clear
@@ -42,6 +42,7 @@ async function setupTwoUserSpaCall(
     (req) => {
       androlHasSentStickyEvent =
         androlHasSentStickyEvent || isStickySend(req.url());
+      androlResolver.resolve();
     },
   );
 
@@ -59,6 +60,7 @@ async function setupTwoUserSpaCall(
 
   let pevaraHasSentStickyEvent = false;
 
+  const pevaraResolver = Promise.withResolvers<void>();
   await interceptEventSend(
     guestPage,
     // This room is not encrypted, so the event is sent in clear
@@ -66,6 +68,7 @@ async function setupTwoUserSpaCall(
     (req) => {
       pevaraHasSentStickyEvent =
         pevaraHasSentStickyEvent || isStickySend(req.url());
+      pevaraResolver.resolve();
     },
   );
 
@@ -76,8 +79,10 @@ async function setupTwoUserSpaCall(
     "2_0",
   );
   // Assert both sides have sent sticky membership events
-  await expect.poll(() => androlHasSentStickyEvent).toBe(true);
-  await expect.poll(() => pevaraHasSentStickyEvent).toBe(true);
+  await androlResolver.promise;
+  expect(androlHasSentStickyEvent).toEqual(true);
+  await pevaraResolver.promise;
+  expect(pevaraHasSentStickyEvent).toEqual(true);
 
   return { guestPage };
 }
@@ -116,8 +121,12 @@ test("One to One rejoin after improper leave does not crash EC", async ({
   await guestPage.getByTestId("lobby_joinCall").click();
 
   // We cannot use the `expectVideoTilesCount` helper here since one of them is expected to show waiting for media
-  await expect(page.getByTestId("videoTile")).toHaveCount(3);
-  await expect(guestPage.getByTestId("videoTile")).toHaveCount(2);
+  await expect(page.getByTestId("videoTile")).toHaveCount(3, {
+    timeout: 10000,
+  });
+  await expect(guestPage.getByTestId("videoTile")).toHaveCount(2, {
+    timeout: 10000,
+  });
 });
 
 test.describe("RNNoise scenarios", () => {

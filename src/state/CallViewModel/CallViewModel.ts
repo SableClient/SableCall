@@ -15,6 +15,7 @@ import {
 } from "livekit-client";
 import { type Room as MatrixRoom } from "matrix-js-sdk";
 import {
+  BehaviorSubject,
   catchError,
   combineLatest,
   distinctUntilChanged,
@@ -28,7 +29,6 @@ import {
   pairwise,
   race,
   scan,
-  skipWhile,
   startWith,
   Subject,
   switchAll,
@@ -38,6 +38,7 @@ import {
   tap,
   throttleTime,
   timer,
+  takeUntil,
 } from "rxjs";
 import { logger as rootLogger } from "matrix-js-sdk/lib/logger";
 import {
@@ -60,7 +61,6 @@ import {
 import {
   duplicateTiles,
   echoCancellationSetting,
-  MatrixRTCMode,
   noiseSuppressionSetting,
   playReactionsSound,
   rnnoiseNoiseSuppression,
@@ -68,12 +68,15 @@ import {
 } from "../../settings/settings";
 import { shouldEnableNativeNoiseSuppression } from "../../audio/noiseSuppressionPolicy";
 import { supportsRNNoiseProcessor } from "../../audio/RNNoiseProcessor";
+import { Config } from "../../config/Config";
+import { MatrixRTCMode } from "../../config/ConfigOptions";
 import { isFirefox, platform } from "../../Platform";
 import { setPipEnabled$ } from "../../controls";
 import { TileStore } from "../TileStore";
 import { gridLikeLayout } from "../GridLikeLayout";
 import { spotlightExpandedLayout } from "../SpotlightExpandedLayout";
-import { oneOnOneLayout } from "../OneOnOneLayout";
+import { oneOnOneLandscapeLayout } from "../OneOnOneLandscapeLayout";
+import { oneOnOnePortraitLayout } from "../OneOnOnePortraitLayout";
 import { pipLayout } from "../PipLayout";
 import { type EncryptionSystem } from "../../e2ee/sharedKeyManagement";
 import {
@@ -87,14 +90,16 @@ import { constant, type Behavior } from "../Behavior";
 import { E2eeType } from "../../e2ee/e2eeType";
 import { MatrixKeyProvider } from "../../e2ee/matrixKeyProvider";
 import { type MuteStates } from "../MuteStates";
-import { getUrlParams } from "../../UrlParams";
+import { getUrlParams, HeaderStyle } from "../../UrlParams";
 import { type ProcessorState } from "../../livekit/TrackProcessorContext";
 import { ElementWidgetActions, widget } from "../../widget";
 import {
+  type Alignment,
   type GridLayoutMedia,
   type Layout,
   type LayoutMedia,
-  type OneOnOneLayoutMedia,
+  type OneOnOneLandscapeLayoutMedia,
+  type OneOnOnePortraitLayoutMedia,
   type SpotlightExpandedLayoutMedia,
   type SpotlightLandscapeLayoutMedia,
   type SpotlightPortraitLayoutMedia,
@@ -110,21 +115,24 @@ import {
 import {
   createLocalTransport$,
   JwtEndpointVersion,
+  type LocalTransport,
 } from "./localMember/LocalTransport.ts";
 import {
   createMemberships$,
   membershipsAndTransports$,
 } from "../SessionBehaviors.ts";
-import { ECConnectionFactory } from "./remoteMembers/ConnectionFactory.ts";
+import {
+  type ConnectionFactory,
+  ECConnectionFactory,
+} from "./remoteMembers/ConnectionFactory.ts";
 import {
   type ConnectionManagerData,
   createConnectionManager$,
 } from "./remoteMembers/ConnectionManager.ts";
 import {
-  createMatrixLivekitMembers$,
+  createRemoteMatrixLivekitMembers$,
   type LocalMatrixLivekitMember,
   type RemoteMatrixLivekitMember,
-  type MatrixLivekitMember,
 } from "./remoteMembers/MatrixLivekitMembers.ts";
 import {
   type AutoLeaveReason,
@@ -133,7 +141,6 @@ import {
   createSentCallNotification$,
 } from "./CallNotificationLifecycle.ts";
 import {
-  createDMMember$,
   createMatrixMemberMetadata$,
   createRoomMembers$,
 } from "./remoteMembers/MatrixMemberMetadata.ts";
@@ -142,12 +149,18 @@ import { type Connection } from "./remoteMembers/Connection.ts";
 import { createLayoutModeSwitch } from "./LayoutSwitch.ts";
 import {
   createWrappedUserMedia,
-  type MediaItem,
   type WrappedUserMediaViewModel,
-} from "../media/MediaItem.ts";
+} from "../media/WrappedUserMediaViewModel.ts";
 import { type ScreenShareViewModel } from "../media/ScreenShareViewModel.ts";
 import { type UserMediaViewModel } from "../media/UserMediaViewModel.ts";
 import { type MediaViewModel } from "../media/MediaViewModel.ts";
+import { type LocalUserMediaViewModel } from "../media/LocalUserMediaViewModel.ts";
+import { type RemoteUserMediaViewModel } from "../media/RemoteUserMediaViewModel.ts";
+import {
+  createRingingMedia,
+  type RingingMediaViewModel,
+} from "../media/RingingMediaViewModel.ts";
+import { type GridTileViewModel } from "../TileViewModel.ts";
 
 const logger = rootLogger.getChild("[CallViewModel]");
 //TODO
@@ -160,6 +173,7 @@ const logger = rootLogger.getChild("[CallViewModel]");
 export interface CallViewModelOptions {
   encryptionSystem: EncryptionSystem;
   autoLeaveWhenOthersLeft?: boolean;
+  autoLeaveDelayMs?: number;
   /**
    * If the call is started in a way where we want it to behave like a telephone usecase
    * If we sent a notification event, we want the ui to show a ringing state
@@ -171,8 +185,14 @@ export interface CallViewModelOptions {
   connectionState$?: Behavior<ConnectionState>;
   /** Optional behavior overriding the computed window size, mainly for testing purposes. */
   windowSize$?: Behavior<{ width: number; height: number }>;
+  /** Optional value overriding the local transport, for testing purposes. */
+  localTransport?: LocalTransport;
+  /** Optional value overriding the connection factory, for testing purposes. */
+  connectionFactory?: ConnectionFactory;
   /** The version & compatibility mode of MatrixRTC that we should use. */
   matrixRTCMode$?: Behavior<MatrixRTCMode>;
+  /** Optional behavior overriding for the screensharing, for testing */
+  toggleScreensharing?: () => void;
 }
 
 // Do not play any sounds if the participant count has exceeded this
@@ -215,11 +235,14 @@ export type LivekitRoomItem = {
 export interface CallViewModel {
   // lifecycle
   autoLeave$: Observable<AutoLeaveReason>;
-  // TODO if we are in "unknown" state we need a loading rendering (or empty screen)
-  // Otherwise it looks like we already connected and only than the ringing starts which is weird.
-  callPickupState$: Behavior<
-    "unknown" | "ringing" | "timeout" | "decline" | "success" | null
-  >;
+  /**
+   * View model for info relating to ringing, timing out, calling back, etc.
+   */
+  ringingVm$: Behavior<RingingMediaViewModel | null>;
+  /**
+   * Which visual element the ringing status should be shown in.
+   */
+  ringingStatusLocation: "app_bar" | "tile";
   /** Observable that emits when the user should leave the call (hangup pressed, widget action, error).
    * THIS DOES NOT LEAVE THE CALL YET. The only way to leave the call (send the hangup event) is
    *  - by ending the scope
@@ -287,20 +310,13 @@ export interface CallViewModel {
   /** Participants sorted by livekit room so they can be used in the audio rendering */
   livekitRoomItems$: Behavior<LivekitRoomItem[]>;
   /** use the layout instead, this is just for the sdk export. */
-  matrixLivekitMembers$: Behavior<RemoteMatrixLivekitMember[]>;
+  remoteMatrixLivekitMembers$: Behavior<RemoteMatrixLivekitMember[]>;
   localMatrixLivekitMember$: Behavior<LocalMatrixLivekitMember | null>;
   /** List of participants raising their hand */
   handsRaised$: Behavior<Record<string, RaisedHandInfo>>;
   /** List of reactions. Keys are: membership.membershipId (currently predefined as: `${membershipEvent.userId}:${membershipEvent.deviceId}`)*/
   reactions$: Behavior<Record<string, ReactionOption>>;
 
-  ringOverlay$: Behavior<null | {
-    name: string;
-    /** roomId or userId for the avatar generation. */
-    idForAvatar: string;
-    text: string;
-    avatarMxc?: string;
-  }>;
   // sounds and events
   joinSoundEffect$: Observable<void>;
   leaveSoundEffect$: Observable<void>;
@@ -326,16 +342,6 @@ export interface CallViewModel {
     { sender: string; emoji: string; startX: number }[]
   >;
 
-  // window/layout
-  /**
-   * The general shape of the window.
-   */
-  windowMode$: Behavior<WindowMode>;
-  spotlightExpanded$: Behavior<boolean>;
-  toggleSpotlightExpanded$: Behavior<(() => void) | null>;
-  gridMode$: Behavior<GridMode>;
-  setGridMode: (value: GridMode) => void;
-
   /**
    * The layout of tiles in the call interface.
    */
@@ -346,10 +352,23 @@ export interface CallViewModel {
   tileStoreGeneration$: Behavior<number>;
   showSpotlightIndicators$: Behavior<boolean>;
   showSpeakingIndicators$: Behavior<boolean>;
+  showNameTags$: Behavior<boolean>;
+  spotlightExpanded$: Behavior<boolean>;
+  toggleSpotlightExpanded$: Behavior<(() => void) | null>;
+  gridMode$: Behavior<GridMode>;
+  setGridMode: (value: GridMode) => void;
 
   // header/footer visibility
   showHeader$: Behavior<boolean>;
   showFooter$: Behavior<boolean>;
+  /**
+   * Whether the call layout should be displayed edge-to-edge, with the footer
+   * and header as overlays.
+   */
+  edgeToEdge$: Behavior<boolean>;
+
+  settingsOpen$: Behavior<boolean>;
+  setSettingsOpen$: Behavior<(open: boolean) => void>;
 
   // audio routing
   /**
@@ -408,8 +427,15 @@ export function createCallViewModel$(
     options.encryptionSystem,
     matrixRTCSession,
   );
+  // matrix_rtc_mode in config.json overrides the user's Developer Settings choice.
+  // It is validated at config load (src/config/Config.ts) so the cast is safe.
+  const configMatrixRTCMode = Config.get().matrix_rtc_mode as
+    | MatrixRTCMode
+    | undefined;
   const matrixRTCMode$ =
-    options.matrixRTCMode$ ?? constant(MatrixRTCMode.Legacy);
+    configMatrixRTCMode !== undefined
+      ? constant(configMatrixRTCMode)
+      : (options.matrixRTCMode$ ?? constant(MatrixRTCMode.Legacy));
 
   // Each hbar seperates a block of input variables required for the CallViewModel to function.
   // The outputs of this block is written under the hbar.
@@ -450,6 +476,7 @@ export function createCallViewModel$(
         // Re-create LocalTransport whenever the mode changes
         (mode) => ({ keys: [mode], data: undefined }),
         (scope, _data$, mode) =>
+          options.localTransport ??
           createLocalTransport$({
             scope: scope,
             memberships$: memberships$,
@@ -476,21 +503,23 @@ export function createCallViewModel$(
     ),
   );
 
-  const connectionFactory = new ECConnectionFactory(
-    client,
-    matrixRoom.roomId,
-    mediaDevices,
-    trackProcessorState$,
-    livekitKeyProvider,
-    getUrlParams().controlledAudioDevices,
-    options.livekitRoomFactory,
-    echoCancellationSetting.getValue(),
-    shouldEnableNativeNoiseSuppression({
-      urlNoiseSuppression: noiseSuppressionSetting.getValue(),
-      rnnoiseEnabled: rnnoiseNoiseSuppression.getValue(),
-      rnnoiseSupported: supportsRNNoiseProcessor(),
-    }),
-  );
+  const connectionFactory =
+    options.connectionFactory ??
+    new ECConnectionFactory(
+      client,
+      matrixRoom.roomId,
+      mediaDevices,
+      trackProcessorState$,
+      livekitKeyProvider,
+      getUrlParams().controlledAudioDevices,
+      options.livekitRoomFactory,
+      echoCancellationSetting.getValue(),
+      shouldEnableNativeNoiseSuppression({
+        urlNoiseSuppression: noiseSuppressionSetting.getValue(),
+        rnnoiseEnabled: rnnoiseNoiseSuppression.getValue(),
+        rnnoiseSupported: supportsRNNoiseProcessor(),
+      }),
+    );
 
   const connectionManager = createConnectionManager$({
     scope: scope,
@@ -512,13 +541,15 @@ export function createCallViewModel$(
     ownMembershipIdentity,
   });
 
-  const matrixLivekitMembers$: Behavior<Epoch<RemoteMatrixLivekitMember[]>> =
-    createMatrixLivekitMembers$({
-      scope: scope,
-      membershipsWithTransport$:
-        membershipsAndTransports.membershipsWithTransport$,
-      connectionManager: connectionManager,
-    });
+  const remoteMatrixLivekitMembers$: Behavior<
+    Epoch<RemoteMatrixLivekitMember[]>
+  > = createRemoteMatrixLivekitMembers$({
+    scope: scope,
+    membershipsWithTransport$:
+      membershipsAndTransports.membershipsWithTransport$,
+    connectionManager: connectionManager,
+    localUser: { userId, deviceId },
+  });
 
   const connectOptions$ = scope.behavior(
     matrixRTCMode$.pipe(
@@ -559,9 +590,8 @@ export function createCallViewModel$(
     },
     connectionManager,
     matrixRTCSession,
-    localTransport$: scope.behavior(
-      localTransport$.pipe(switchMap((t) => t.advertised$)),
-    ),
+    localTransport$,
+    roomId: matrixRoom.roomId,
     logger: logger.getChild(`[${Date.now()}]`),
   });
 
@@ -596,19 +626,12 @@ export function createCallViewModel$(
       ),
     );
 
-  // ------------------------------------------------------------------------
-  // callLifecycle
-
-  // TODO if we are in "unknown" state we need a loading rendering (or empty screen)
-  // Otherwise it looks like we already connected and only than the ringing starts which is weird.
-  const { callPickupState$, autoLeave$ } = createCallNotificationLifecycle$({
-    scope: scope,
-    memberships$: memberships$,
-    sentCallNotification$: createSentCallNotification$(scope, matrixRTCSession),
-    receivedDecline$: createReceivedDecline$(matrixRoom),
-    options: options,
-    localUser: { userId: userId, deviceId: deviceId },
-  });
+  const matrixLivekitMembers$ = scope.behavior(
+    combineLatest(
+      [localMatrixLivekitMember$, remoteMatrixLivekitMembers$],
+      (local, remote) => [...(local === null ? [] : [local]), ...remote.value],
+    ),
+  );
 
   // ------------------------------------------------------------------------
   // matrixMemberMetadataStore
@@ -620,45 +643,26 @@ export function createCallViewModel$(
     matrixRoomMembers$,
   );
 
-  const dmMember$ = createDMMember$(scope, matrixRoomMembers$, matrixRoom);
-  const noUserToCallInRoom$ = scope.behavior(
-    matrixRoomMembers$.pipe(
-      map(
-        (roomMembersMap) =>
-          roomMembersMap.size === 1 && roomMembersMap.get(userId) !== undefined,
-      ),
-    ),
-  );
+  // ------------------------------------------------------------------------
+  // callLifecycle
 
-  const ringOverlay$ = scope.behavior(
-    combineLatest([noUserToCallInRoom$, dmMember$, callPickupState$]).pipe(
-      map(([noUserToCallInRoom, dmMember, callPickupState]) => {
-        // No overlay if not in ringing state
-        if (callPickupState !== "ringing" || noUserToCallInRoom) return null;
-
-        const name = dmMember ? dmMember.rawDisplayName : matrixRoom.name;
-        const id = dmMember ? dmMember.userId : matrixRoom.roomId;
-        const text = dmMember
-          ? `Waiting for ${name} to join…`
-          : "Waiting for other participants…";
-        const avatarMxc = dmMember
-          ? (dmMember.getMxcAvatarUrl?.() ?? undefined)
-          : (matrixRoom.getMxcAvatarUrl() ?? undefined);
-        return {
-          name: name ?? id,
-          idForAvatar: id,
-          text,
-          avatarMxc,
-        };
-      }),
-    ),
-  );
+  // TODO if we are in "unknown" state we need a loading rendering (or empty screen)
+  // Otherwise it looks like we already connected and only than the ringing starts which is weird.
+  const { ringAttempts$, autoLeave$ } = createCallNotificationLifecycle$({
+    scope,
+    memberships$,
+    matrixRoomMembers$,
+    sentCallNotification$: createSentCallNotification$(scope, matrixRTCSession),
+    receivedDecline$: createReceivedDecline$(matrixRoom),
+    options,
+    localUser: { userId, deviceId },
+  });
 
   const allConnections$ = scope.behavior(
     connectionManager.connectionManagerData$.pipe(map((d) => d.value)),
   );
   const livekitRoomItems$ = scope.behavior(
-    matrixLivekitMembers$.pipe(
+    remoteMatrixLivekitMembers$.pipe(
       switchMap((members) => {
         const a$ = combineLatest(
           members.value.map((member) =>
@@ -724,43 +728,20 @@ export function createCallViewModel$(
    * List of user media (camera feeds) that we want tiles for.
    */
   const userMedia$ = scope.behavior<WrappedUserMediaViewModel[]>(
-    combineLatest([
-      localMatrixLivekitMember$,
-      matrixLivekitMembers$,
-      duplicateTiles.value$,
-    ]).pipe(
-      // Generate a collection of MediaItems from the list of expected (whether
+    combineLatest([matrixLivekitMembers$, duplicateTiles.value$]).pipe(
+      // Generate a collection of user media from the list of expected (whether
       // present or missing) LiveKit participants.
       generateItems(
         "CallViewModel userMedia$",
-        function* ([
-          localMatrixLivekitMember,
-          matrixLivekitMembers,
-          duplicateTiles,
-        ]) {
-          const computeMediaId = (m: MatrixLivekitMember): string =>
-            `${m.userId}:${m.membership$.value.deviceId}`;
-
-          const localUserMediaId = localMatrixLivekitMember
-            ? computeMediaId(localMatrixLivekitMember)
-            : undefined;
-
-          const localAsArray = localMatrixLivekitMember
-            ? [localMatrixLivekitMember]
-            : [];
-          const remoteWithoutLocal = matrixLivekitMembers.value.filter(
-            (m) => computeMediaId(m) !== localUserMediaId,
-          );
-          const allMatrixLivekitMembers = [
-            ...localAsArray,
-            ...remoteWithoutLocal,
-          ];
-
-          for (const matrixLivekitMember of allMatrixLivekitMembers) {
-            const { userId, participant, connection$, membership$ } =
-              matrixLivekitMember;
-            const rtcId = membership$.value.rtcBackendIdentity; // rtcBackendIdentity
-            const mediaId = computeMediaId(matrixLivekitMember);
+        function* ([members, duplicateTiles]) {
+          for (const {
+            userId,
+            participant,
+            connection$,
+            membership$,
+          } of members) {
+            const rtcId = membership$.value.rtcBackendIdentity;
+            const mediaId = `${userId}:${membership$.value.deviceId}`;
             for (let dup = 0; dup < 1 + duplicateTiles; dup++) {
               yield {
                 keys: [dup, mediaId, userId, participant, connection$, rtcId],
@@ -786,11 +767,13 @@ export function createCallViewModel$(
             pretendToBeDisconnected$: localMembership.reconnecting$,
             displayName$: scope.behavior(
               matrixMemberMetadataStore
-                .createDisplayNameBehavior$(userId)
+                .createDisplayNameBehavior$(scope, userId)
                 .pipe(map((name) => name ?? userId)),
             ),
-            mxcAvatarUrl$:
-              matrixMemberMetadataStore.createAvatarUrlBehavior$(userId),
+            mxcAvatarUrl$: matrixMemberMetadataStore.createAvatarUrlBehavior$(
+              scope,
+              userId,
+            ),
             handRaised$: scope.behavior(
               handsRaised$.pipe(map((v) => v[mediaId]?.time ?? null)),
             ),
@@ -802,29 +785,58 @@ export function createCallViewModel$(
     ),
   );
 
+  const ringingMedia$ = scope.behavior<RingingMediaViewModel | null>(
+    ringAttempts$.pipe(
+      switchMap(({ intent, recipient, outcome$ }) =>
+        outcome$.pipe(
+          startWith("ringing" as const),
+          generateItems(
+            "CallViewModel ringingMedia$",
+            function* (pickupState) {
+              if (pickupState !== "accept")
+                yield { keys: [intent, recipient], data: pickupState };
+            },
+            (scope, pickupState$, intent, userId) =>
+              createRingingMedia({
+                id: `ringing:${userId}`,
+                userId,
+                displayName$: scope.behavior(
+                  matrixRoomMembers$.pipe(
+                    map(
+                      (members) =>
+                        members.get(userId)?.rawDisplayName || userId,
+                    ),
+                  ),
+                ),
+                mxcAvatarUrl$:
+                  matrixMemberMetadataStore.createAvatarUrlBehavior$(
+                    scope,
+                    userId,
+                  ),
+                pickupState$,
+                intent,
+              }),
+          ),
+          map(([media]) => media ?? null),
+        ),
+      ),
+      startWith(null),
+    ),
+  );
+
   /**
-   * List of all media items (user media and screen share media) that we want
-   * tiles for.
+   * All screen share media that we want to display.
    */
-  const mediaItems$ = scope.behavior<MediaItem[]>(
+  const screenShares$ = scope.behavior<ScreenShareViewModel[]>(
     userMedia$.pipe(
       switchMap((userMedia) =>
         userMedia.length === 0
           ? of([])
           : combineLatest(
               userMedia.map((m) => m.screenShares$),
-              (...screenShares) => [...userMedia, ...screenShares.flat(1)],
+              (...screenShares) => screenShares.flat(1),
             ),
       ),
-    ),
-  );
-
-  /**
-   * List of MediaItems that we want to display, that are of type ScreenShare
-   */
-  const screenShares$ = scope.behavior<ScreenShareViewModel[]>(
-    mediaItems$.pipe(
-      map((mediaItems) => mediaItems.filter((m) => m.type === "screen share")),
     ),
   );
 
@@ -847,14 +859,10 @@ export function createCallViewModel$(
    *    multiple devices.
    */
   const participantCount$ = scope.behavior(
-    matrixLivekitMembers$.pipe(map((ms) => ms.value.length)),
+    matrixLivekitMembers$.pipe(map((ms) => ms.length)),
   );
 
-  const leaveSoundEffect$ = combineLatest([callPickupState$, userMedia$]).pipe(
-    // Until the call is successful, do not play a leave sound.
-    // If callPickupState$ is null, then we always play the sound as it will not conflict with a decline sound.
-    skipWhile(([c]) => c !== null && c !== "success"),
-    map(([, userMedia]) => userMedia),
+  const leaveSoundEffect$ = userMedia$.pipe(
     pairwise(),
     filter(
       ([prev, current]) =>
@@ -863,6 +871,9 @@ export function createCallViewModel$(
     ),
     map(() => {}),
     throttleTime(THROTTLE_SOUND_EFFECT_MS),
+    // Avoid doubling up on any auto-leave sounds (e.g. the decline sound),
+    // which are handled elsewhere
+    takeUntil(autoLeave$),
   );
 
   const userHangup$ = new Subject<void>();
@@ -940,44 +951,62 @@ export function createCallViewModel$(
     ),
   );
 
-  const spotlight$ = scope.behavior<MediaViewModel[]>(
-    screenShares$.pipe(
-      switchMap((screenShares) => {
-        if (screenShares.length > 0) return of(screenShares);
-
-        return spotlightSpeaker$.pipe(
-          map((speaker) => (speaker ? [speaker] : [])),
+  /**
+   * Local user media suitable for displaying in a PiP (undefined if not found,
+   * video is muted, or if user prefers to not see themselves).
+   */
+  const localUserMediaForPip$ = scope.behavior<
+    LocalUserMediaViewModel | undefined
+  >(
+    userMedia$.pipe(
+      switchMap((userMedia) => {
+        const localUserMedia = userMedia.find(
+          (m): m is WrappedUserMediaViewModel & LocalUserMediaViewModel =>
+            m.type === "user" && m.local,
+        );
+        if (!localUserMedia) return of(undefined);
+        return combineLatest(
+          [localUserMedia.videoEnabled$, localUserMedia.alwaysShow$],
+          (videoEnabled, alwaysShow) =>
+            videoEnabled && alwaysShow ? localUserMedia : undefined,
         );
       }),
-      distinctUntilChanged<MediaViewModel[]>(shallowEquals),
     ),
   );
 
-  const pip$ = scope.behavior<UserMediaViewModel | undefined>(
-    combineLatest([
-      // TODO This also needs epoch logic to dedupe the screenshares and mediaItems emits
-      screenShares$,
-      spotlightSpeaker$,
-      mediaItems$,
-    ]).pipe(
-      switchMap(([screenShares, spotlight, mediaItems]) => {
-        if (screenShares.length > 0) {
-          return spotlightSpeaker$;
-        }
-        if (!spotlight || spotlight.local) {
-          return of(undefined);
-        }
+  const spotlightAndPip$ = scope.behavior<{
+    spotlight: MediaViewModel[];
+    pip$: Observable<UserMediaViewModel | undefined>;
+  }>(
+    ringingMedia$.pipe(
+      switchMap((ringingMedia) => {
+        if (ringingMedia !== null)
+          return of({ spotlight: [ringingMedia], pip$: localUserMediaForPip$ });
 
-        const localUserMedia = mediaItems.find(
-          (m) => m.type === "user" && m.local,
-        );
-        if (!localUserMedia) {
-          return of(undefined);
-        }
-        return localUserMedia.alwaysShow$.pipe(
-          map((alwaysShow) => (alwaysShow ? localUserMedia : undefined)),
+        return screenShares$.pipe(
+          switchMap((screenShares) => {
+            if (screenShares.length > 0)
+              return of({ spotlight: screenShares, pip$: spotlightSpeaker$ });
+
+            return spotlightSpeaker$.pipe(
+              map((speaker) => ({
+                spotlight: speaker ? [speaker] : [],
+                // Hide PiP if redundant (i.e. if local user is already in spotlight)
+                pip$: localUserMediaForPip$.pipe(
+                  map((m) => (m === speaker ? undefined : m)),
+                ),
+              })),
+            );
+          }),
         );
       }),
+    ),
+  );
+
+  const spotlight$ = scope.behavior<MediaViewModel[]>(
+    spotlightAndPip$.pipe(
+      map(({ spotlight }) => spotlight),
+      distinctUntilChanged<MediaViewModel[]>(shallowEquals),
     ),
   );
 
@@ -1041,6 +1070,7 @@ export function createCallViewModel$(
     [grid$, spotlight$],
     (grid, spotlight) => ({
       type: "grid",
+      edgeToEdge: false,
       spotlight: spotlight.some((vm) => vm.type === "screen share")
         ? spotlight
         : undefined,
@@ -1048,9 +1078,12 @@ export function createCallViewModel$(
     }),
   );
 
-  const spotlightLandscapeLayoutMedia$: Observable<SpotlightLandscapeLayoutMedia> =
+  const spotlightLandscapeLayoutMedia$ = (
+    edgeToEdge: boolean,
+  ): Observable<SpotlightLandscapeLayoutMedia> =>
     combineLatest([grid$, spotlight$], (grid, spotlight) => ({
       type: "spotlight-landscape",
+      edgeToEdge,
       spotlight,
       grid,
     }));
@@ -1058,35 +1091,133 @@ export function createCallViewModel$(
   const spotlightPortraitLayoutMedia$: Observable<SpotlightPortraitLayoutMedia> =
     combineLatest([grid$, spotlight$], (grid, spotlight) => ({
       type: "spotlight-portrait",
+      edgeToEdge: false,
       spotlight,
       grid,
     }));
 
-  const spotlightExpandedLayoutMedia$: Observable<SpotlightExpandedLayoutMedia> =
-    combineLatest([spotlight$, pip$], (spotlight, pip) => ({
-      type: "spotlight-expanded",
-      spotlight,
-      pip: pip ?? undefined,
-    }));
+  const spotlightExpandedLayoutMedia$ = (
+    edgeToEdge: boolean,
+  ): Observable<SpotlightExpandedLayoutMedia> =>
+    spotlightAndPip$.pipe(
+      switchMap(({ spotlight, pip$ }) =>
+        pip$.pipe(
+          map((pip) => ({
+            type: "spotlight-expanded" as const,
+            edgeToEdge,
+            spotlight,
+            pip: pip ?? undefined,
+          })),
+        ),
+      ),
+    );
 
-  const oneOnOneLayoutMedia$: Observable<OneOnOneLayoutMedia | null> =
-    mediaItems$.pipe(
-      map((mediaItems) => {
-        if (mediaItems.length !== 2) return null;
-        const local = mediaItems.find((vm) => vm.type === "user" && vm.local);
-        const remote = mediaItems.find((vm) => vm.type === "user" && !vm.local);
-        // There might not be a remote tile if there are screen shares, or if
-        // only the local user is in the call and they're using the duplicate
-        // tiles option
-        if (!remote || !local) return null;
+  const oneOnOneLayoutMedia$: Observable<{
+    local: LocalUserMediaViewModel;
+    remote: UserMediaViewModel | RingingMediaViewModel;
+  } | null> = combineLatest([userMedia$, screenShares$]).pipe(
+    switchMap(([userMedia, screenShares]) => {
+      // One-on-one layout only supports 2 user media, no screen shares
+      if (userMedia.length <= 2 && screenShares.length === 0) {
+        const local = userMedia.find(
+          (vm): vm is WrappedUserMediaViewModel & LocalUserMediaViewModel =>
+            vm.type === "user" && vm.local,
+        );
 
-        return { type: "one-on-one", local, remote };
+        if (local !== undefined) {
+          const remote = userMedia.find(
+            (vm): vm is WrappedUserMediaViewModel & RemoteUserMediaViewModel =>
+              vm.type === "user" && !vm.local,
+          );
+
+          if (remote !== undefined) return of({ local, remote });
+
+          // If there's no other user media in the call (could still happen in
+          // this branch due to the duplicate tiles option), we could possibly
+          // show ringing media instead
+          if (userMedia.length === 1)
+            return ringingMedia$.pipe(
+              map(
+                (ringingMedia) =>
+                  ringingMedia && { local, remote: ringingMedia },
+              ),
+            );
+        }
+      }
+
+      return of(null);
+    }),
+  );
+
+  const oneOnOneLandscapeLayoutMedia$: Observable<OneOnOneLandscapeLayoutMedia | null> =
+    oneOnOneLayoutMedia$.pipe(
+      map((media) => {
+        if (media === null) return null;
+        return media.remote.type === "ringing"
+          ? {
+              type: "one-on-one-landscape" as const,
+              edgeToEdge: false,
+              spotlight: media.local,
+              pip: media.remote,
+            }
+          : {
+              type: "one-on-one-landscape" as const,
+              edgeToEdge: false,
+              spotlight: media.remote,
+              pip: media.local,
+            };
+      }),
+    );
+
+  const oneOnOnePortraitLayoutMedia$: Observable<OneOnOnePortraitLayoutMedia | null> =
+    oneOnOneLayoutMedia$.pipe(
+      switchMap((media) => {
+        if (media === null) return of(null);
+        return media.local.videoEnabled$.pipe(
+          map((videoEnabled) => ({
+            type: "one-on-one-portrait" as const,
+            edgeToEdge: true as const,
+            spotlight: media.remote,
+            pip: videoEnabled ? media.local : undefined,
+          })),
+        );
       }),
     );
 
   const pipLayoutMedia$: Observable<LayoutMedia> = spotlight$.pipe(
-    map((spotlight) => ({ type: "pip", spotlight })),
+    map((spotlight) => ({
+      type: "pip",
+      edgeToEdge: platform !== "desktop",
+      spotlight,
+    })),
   );
+
+  spotlight$
+    .pipe(
+      switchMap((media) => {
+        let layout;
+        const pipMedia = media[0];
+        if (pipMedia === undefined) return of(undefined);
+        switch (pipMedia.type) {
+          case "user":
+            layout = pipMedia.videoOrientation$;
+            break;
+          case "ringing":
+            layout = of("landscape" as const);
+            break;
+          case "screen share":
+            layout = of("landscape" as const);
+            break;
+        }
+        return layout;
+      }),
+      scope.bind(),
+    )
+    .subscribe((orientation) => {
+      if (orientation === undefined) return;
+      logger.info("controls api pip orientation updated:", orientation);
+      window.controls.onPipMediaOrientationUpdate?.(orientation);
+    });
 
   /**
    * The media to be used to produce a layout.
@@ -1100,7 +1231,7 @@ export function createCallViewModel$(
               switchMap((gridMode) => {
                 switch (gridMode) {
                   case "grid":
-                    return oneOnOneLayoutMedia$.pipe(
+                    return oneOnOneLandscapeLayoutMedia$.pipe(
                       switchMap((oneOnOne) =>
                         oneOnOne === null ? gridLayoutMedia$ : of(oneOnOne),
                       ),
@@ -1109,15 +1240,15 @@ export function createCallViewModel$(
                     return spotlightExpanded$.pipe(
                       switchMap((expanded) =>
                         expanded
-                          ? spotlightExpandedLayoutMedia$
-                          : spotlightLandscapeLayoutMedia$,
+                          ? spotlightExpandedLayoutMedia$(false)
+                          : spotlightLandscapeLayoutMedia$(false),
                       ),
                     );
                 }
               }),
             );
           case "narrow":
-            return oneOnOneLayoutMedia$.pipe(
+            return oneOnOnePortraitLayoutMedia$.pipe(
               switchMap((oneOnOne) =>
                 oneOnOne === null
                   ? combineLatest([grid$, spotlight$], (grid, spotlight) =>
@@ -1126,9 +1257,7 @@ export function createCallViewModel$(
                         ? spotlightPortraitLayoutMedia$
                         : gridLayoutMedia$,
                     ).pipe(switchAll())
-                  : // The expanded spotlight layout makes for a better one-on-one
-                    // experience in narrow windows
-                    spotlightExpandedLayoutMedia$,
+                  : of(oneOnOne),
               ),
             );
           case "flat":
@@ -1138,9 +1267,9 @@ export function createCallViewModel$(
                   case "grid":
                     // Yes, grid mode actually gets you a "spotlight" layout in
                     // this window mode.
-                    return spotlightLandscapeLayoutMedia$;
+                    return spotlightLandscapeLayoutMedia$(true);
                   case "spotlight":
-                    return spotlightExpandedLayoutMedia$;
+                    return spotlightExpandedLayoutMedia$(true);
                 }
               }),
             );
@@ -1150,6 +1279,201 @@ export function createCallViewModel$(
       }),
     ),
   );
+
+  const showSpotlightIndicators$ = scope.behavior<boolean>(
+    layoutMedia$.pipe(map((l) => l.type !== "grid")),
+  );
+
+  const showSpeakingIndicators$ = scope.behavior<boolean>(
+    layoutMedia$.pipe(
+      map((l) => {
+        switch (l.type) {
+          case "spotlight-landscape":
+          case "spotlight-portrait":
+            // If the spotlight is showing the active speaker, we can do without
+            // speaking indicators as they're a redundant visual cue. But if
+            // screen sharing feeds are in the spotlight we still need them.
+            return l.spotlight.some((m) => m.type === "screen share");
+          // In expanded spotlight layout, the active speaker is always shown in
+          // the picture-in-picture tile so there is no need for speaking
+          // indicators. And in one-on-one layout there's no question as to who is
+          // speaking.
+          case "spotlight-expanded":
+          case "one-on-one-landscape":
+          case "one-on-one-portrait":
+            return false;
+          default:
+            return true;
+        }
+      }),
+    ),
+  );
+
+  const showNameTags$ = scope.behavior<boolean>(
+    layoutMedia$.pipe(
+      switchMap((l) =>
+        l.type === "pip" || l.type === "one-on-one-portrait"
+          ? matrixRoomMembers$.pipe(
+              map(
+                (members) =>
+                  // Hide name tags by default in these layouts. For safety we
+                  // still need to show them in case it wouldn't be clear who
+                  // the spotlight media belongs to.
+                  // TODO: Respect io.element.functional_members (while still
+                  // being careful to never show a functional member's media
+                  // without a name tag!)
+                  // TODO: Only hide name tags in DMs, not group chats that just
+                  // happen to have only 2 users
+                  members.size > 2,
+              ),
+            )
+          : of(true),
+      ),
+    ),
+  );
+
+  const toggleSpotlightExpanded$ = scope.behavior<(() => void) | null>(
+    windowMode$.pipe(
+      switchMap((mode) =>
+        mode === "normal"
+          ? layoutMedia$.pipe(
+              map(
+                (l) =>
+                  l.type === "spotlight-landscape" ||
+                  l.type === "spotlight-expanded",
+              ),
+            )
+          : of(false),
+      ),
+      distinctUntilChanged(),
+      map((enabled) =>
+        enabled ? (): void => spotlightExpandedToggle$.next() : null,
+      ),
+    ),
+  );
+
+  const edgeToEdge$ = scope.behavior<boolean>(
+    layoutMedia$.pipe(map(({ edgeToEdge }) => edgeToEdge)),
+  );
+
+  const screenTap$ = new Subject<void>();
+  const controlsTap$ = new Subject<void>();
+  const screenHover$ = new Subject<void>();
+  const screenUnhover$ = new Subject<void>();
+
+  const naturallyShowFooter$ = scope.behavior<boolean>(
+    edgeToEdge$.pipe(
+      switchMap((edgeToEdge) => {
+        if (!edgeToEdge) return of(true);
+
+        // Sadly Firefox has some layering glitches that prevent the footer
+        // from appearing properly. They happen less often if we never hide
+        // the footer.
+        if (isFirefox()) return of(true);
+
+        // Layout is edge-to-edge; show/hide the footer in response to interactions
+        return windowMode$.pipe(
+          switchMap((mode) => {
+            if (mode === "pip" && platform !== "desktop") {
+              // No controls are shown in mobile pip as interactions are disabled
+              return of(false);
+            }
+            const showInitially = mode !== "flat";
+            const timeout$ = mode === "flat" ? timer(showFooterMs) : NEVER;
+
+            return merge(
+              screenTap$.pipe(map(() => "tap screen" as const)),
+              controlsTap$.pipe(map(() => "tap controls" as const)),
+              screenHover$.pipe(map(() => "hover" as const)),
+            ).pipe(
+              switchScan((state, interaction) => {
+                switch (interaction) {
+                  case "tap screen":
+                    return state
+                      ? // Toggle visibility on tap
+                        of(false)
+                      : // Hide after a timeout
+                        timeout$.pipe(
+                          map(() => false),
+                          startWith(true),
+                        );
+                  case "tap controls":
+                    // The user is interacting with things, so reset the timeout
+                    return timeout$.pipe(
+                      map(() => false),
+                      startWith(true),
+                    );
+                  case "hover":
+                    // Show on hover and hide after a timeout
+                    return race(timeout$, screenUnhover$.pipe(take(1))).pipe(
+                      map(() => false),
+                      startWith(true),
+                    );
+                }
+              }, showInitially),
+              startWith(showInitially),
+            );
+          }),
+        );
+      }),
+    ),
+  );
+
+  const urlParams = getUrlParams();
+  const showFooterUrlParams = !(
+    urlParams.header === HeaderStyle.None && urlParams.showControls === false
+  );
+  const showFooter$ = scope.behavior(
+    naturallyShowFooter$.pipe(
+      map((naturallyShowFooter) => naturallyShowFooter && showFooterUrlParams),
+    ),
+  );
+  const settingsOpen$ = new BehaviorSubject(false);
+  const setSettingsOpen$ = constant((open: boolean) => {
+    settingsOpen$.next(open);
+  });
+
+  const showHeader$ = scope.behavior<boolean>(
+    windowMode$.pipe(
+      switchMap((mode) => {
+        // In small windows the header would be too obstructive
+        if (mode === "pip") return of(false);
+        // In edge-to-edge layouts, couple the visibility of the header
+        // to that of the footer
+        return edgeToEdge$.pipe(
+          switchMap((edgeToEdge) => (edgeToEdge ? showFooter$ : of(true))),
+        );
+      }),
+    ),
+  );
+
+  /**
+   * The alignment of the floating spotlight tile, if present.
+   */
+  const spotlightAlignment$ = new BehaviorSubject<Alignment>({
+    inline: "end",
+    block: "end",
+  });
+  /**
+   * The size of the small picture-in-picture tile, if present, when in portrait.
+   */
+  const portraitPipSize$ = scope.behavior(
+    showFooter$.pipe(map((showFooter) => (showFooter ? "lg" : "sm"))),
+  );
+  /**
+   * The alignment of the small picture-in-picture tile, if present, when in portrait.
+   */
+  const portraitPipAlignment$ = new BehaviorSubject<Alignment>({
+    inline: "end",
+    block: "end",
+  });
+  /**
+   * The alignment of the small picture-in-picture tile, if present, when in landscape.
+   */
+  const landscapePipAlignment$ = new BehaviorSubject<Alignment>({
+    inline: "end",
+    block: "start",
+  });
 
   // There is a cyclical dependency here: the layout algorithms want to know
   // which tiles are on screen, but to know which tiles are on screen we have to
@@ -1171,26 +1495,50 @@ export function createCallViewModel$(
         ({ tiles: prevTiles }, [media, visibleTiles]) => {
           let layout: Layout;
           let newTiles: TileStore;
+          let pip: GridTileViewModel | undefined;
           switch (media.type) {
             case "grid":
             case "spotlight-landscape":
             case "spotlight-portrait":
               [layout, newTiles] = gridLikeLayout(
                 media,
+                spotlightAlignment$,
                 visibleTiles,
                 setVisibleTiles,
                 prevTiles,
               );
               break;
             case "spotlight-expanded":
-              [layout, newTiles] = spotlightExpandedLayout(media, prevTiles);
+              [layout, newTiles] = spotlightExpandedLayout(
+                media,
+                landscapePipAlignment$,
+                prevTiles,
+              );
               break;
-            case "one-on-one":
-              [layout, newTiles] = oneOnOneLayout(media, prevTiles);
+            case "one-on-one-landscape":
+              [layout, newTiles] = oneOnOneLandscapeLayout(
+                media,
+                landscapePipAlignment$,
+                prevTiles,
+              );
+              pip = layout.pip;
+              break;
+            case "one-on-one-portrait":
+              [layout, newTiles] = oneOnOnePortraitLayout(
+                media,
+                portraitPipSize$,
+                portraitPipAlignment$,
+                prevTiles,
+              );
+              pip = layout.pip;
               break;
             case "pip":
               [layout, newTiles] = pipLayout(media, prevTiles);
               break;
+          }
+
+          for (const tile of newTiles.gridTiles) {
+            tile.setShowOutline(tile === pip);
           }
 
           return { layout, tiles: newTiles };
@@ -1212,122 +1560,6 @@ export function createCallViewModel$(
    */
   const tileStoreGeneration$ = scope.behavior<number>(
     layoutInternals$.pipe(map(({ tiles }) => tiles.generation)),
-  );
-
-  const showSpotlightIndicators$ = scope.behavior<boolean>(
-    layout$.pipe(map((l) => l.type !== "grid")),
-  );
-
-  const showSpeakingIndicators$ = scope.behavior<boolean>(
-    layout$.pipe(
-      switchMap((l) => {
-        switch (l.type) {
-          case "spotlight-landscape":
-          case "spotlight-portrait":
-            // If the spotlight is showing the active speaker, we can do without
-            // speaking indicators as they're a redundant visual cue. But if
-            // screen sharing feeds are in the spotlight we still need them.
-            return l.spotlight.media$.pipe(
-              map((models: MediaViewModel[]) =>
-                models.some((m) => m.type === "screen share"),
-              ),
-            );
-          // In expanded spotlight layout, the active speaker is always shown in
-          // the picture-in-picture tile so there is no need for speaking
-          // indicators. And in one-on-one layout there's no question as to who is
-          // speaking.
-          case "spotlight-expanded":
-          case "one-on-one":
-            return of(false);
-          default:
-            return of(true);
-        }
-      }),
-    ),
-  );
-
-  const toggleSpotlightExpanded$ = scope.behavior<(() => void) | null>(
-    windowMode$.pipe(
-      switchMap((mode) =>
-        mode === "normal"
-          ? layout$.pipe(
-              map(
-                (l) =>
-                  l.type === "spotlight-landscape" ||
-                  l.type === "spotlight-expanded",
-              ),
-            )
-          : of(false),
-      ),
-      distinctUntilChanged(),
-      map((enabled) =>
-        enabled ? (): void => spotlightExpandedToggle$.next() : null,
-      ),
-    ),
-  );
-
-  const screenTap$ = new Subject<void>();
-  const controlsTap$ = new Subject<void>();
-  const screenHover$ = new Subject<void>();
-  const screenUnhover$ = new Subject<void>();
-
-  const showHeader$ = scope.behavior<boolean>(
-    windowMode$.pipe(map((mode) => mode !== "pip" && mode !== "flat")),
-  );
-
-  const showFooter$ = scope.behavior<boolean>(
-    windowMode$.pipe(
-      switchMap((mode) => {
-        switch (mode) {
-          case "pip":
-            return of(platform === "desktop" ? true : false);
-          case "normal":
-          case "narrow":
-            return of(true);
-          case "flat":
-            // Sadly Firefox has some layering glitches that prevent the footer
-            // from appearing properly. They happen less often if we never hide
-            // the footer.
-            if (isFirefox()) return of(true);
-            // Show/hide the footer in response to interactions
-            return merge(
-              screenTap$.pipe(map(() => "tap screen" as const)),
-              controlsTap$.pipe(map(() => "tap controls" as const)),
-              screenHover$.pipe(map(() => "hover" as const)),
-            ).pipe(
-              switchScan((state, interaction) => {
-                switch (interaction) {
-                  case "tap screen":
-                    return state
-                      ? // Toggle visibility on tap
-                        of(false)
-                      : // Hide after a timeout
-                        timer(showFooterMs).pipe(
-                          map(() => false),
-                          startWith(true),
-                        );
-                  case "tap controls":
-                    // The user is interacting with things, so reset the timeout
-                    return timer(showFooterMs).pipe(
-                      map(() => false),
-                      startWith(true),
-                    );
-                  case "hover":
-                    // Show on hover and hide after a timeout
-                    return race(
-                      timer(showFooterMs),
-                      screenUnhover$.pipe(take(1)),
-                    ).pipe(
-                      map(() => false),
-                      startWith(true),
-                    );
-                }
-              }, false),
-              startWith(false),
-            );
-        }
-      }),
-    ),
   );
 
   /**
@@ -1456,7 +1688,8 @@ export function createCallViewModel$(
    * Callback to toggle screen sharing. If null, screen sharing is not possible.
    */
   // reassigned here to make it publicly accessible
-  const toggleScreenSharing = localMembership.toggleScreenSharing;
+  const toggleScreenSharing =
+    options.toggleScreensharing ?? localMembership.toggleScreenSharing;
 
   const errors$ = scope.behavior<{
     transportError?: ElementCallError;
@@ -1491,8 +1724,9 @@ export function createCallViewModel$(
 
   return {
     autoLeave$: autoLeave$,
-    callPickupState$: callPickupState$,
-    ringOverlay$: ringOverlay$,
+    ringingVm$: ringingMedia$,
+    ringingStatusLocation:
+      urlParams.header === HeaderStyle.AppBar ? "app_bar" : "tile",
     leave$: leave$,
     hangup: (): void => userHangup$.next(),
     join: localMembership.requestJoinAndPublish,
@@ -1531,15 +1765,14 @@ export function createCallViewModel$(
     audibleReactions$: audibleReactions$,
     visibleReactions$: visibleReactions$,
 
-    windowMode$: windowMode$,
     spotlightExpanded$: spotlightExpanded$,
     toggleSpotlightExpanded$: toggleSpotlightExpanded$,
     gridMode$: gridMode$,
     setGridMode: setGridMode,
     layout$: layout$,
     localMatrixLivekitMember$,
-    matrixLivekitMembers$: scope.behavior(
-      matrixLivekitMembers$.pipe(
+    remoteMatrixLivekitMembers$: scope.behavior(
+      remoteMatrixLivekitMembers$.pipe(
         map((members) => members.value),
         tap((v) => {
           const listForLogs = v
@@ -1557,8 +1790,12 @@ export function createCallViewModel$(
     tileStoreGeneration$: tileStoreGeneration$,
     showSpotlightIndicators$: showSpotlightIndicators$,
     showSpeakingIndicators$: showSpeakingIndicators$,
+    showNameTags$,
     showHeader$: showHeader$,
     showFooter$: showFooter$,
+    settingsOpen$: settingsOpen$,
+    setSettingsOpen$: setSettingsOpen$,
+    edgeToEdge$,
     earpieceMode$: earpieceMode$,
     audioOutputSwitcher$: audioOutputSwitcher$,
     reconnecting$: localMembership.reconnecting$,

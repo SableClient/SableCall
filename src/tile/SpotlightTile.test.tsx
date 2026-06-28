@@ -6,10 +6,11 @@ Please see LICENSE in the repository root for full details.
 */
 
 import { test, expect, vi } from "vitest";
-import { isInaccessible, render, screen } from "@testing-library/react";
+import { act, isInaccessible, render, screen } from "@testing-library/react";
 import { axe } from "vitest-axe";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "@vector-im/compound-web";
+import { BehaviorSubject } from "rxjs";
 
 import { SpotlightTile } from "./SpotlightTile";
 import {
@@ -23,6 +24,10 @@ import {
 } from "../utils/test";
 import { SpotlightTileViewModel } from "../state/TileViewModel";
 import { constant } from "../state/Behavior";
+import {
+  createRingingMedia,
+  type RingingMediaViewModel,
+} from "../state/media/RingingMediaViewModel";
 
 global.IntersectionObserver = class MockIntersectionObserver {
   public observe(): void {}
@@ -59,6 +64,8 @@ test("SpotlightTile is accessible", async () => {
       expanded={false}
       onToggleExpanded={toggleExpanded}
       showIndicators
+      showNameTags
+      showRingingStatus
       focusable={true}
     />,
   );
@@ -100,6 +107,8 @@ test("Screen share volume UI is shown when screen share has audio", async () => 
         expanded={false}
         onToggleExpanded={toggleExpanded}
         showIndicators
+        showNameTags
+        showRingingStatus
         focusable
       />
     </TooltipProvider>,
@@ -129,6 +138,8 @@ test("Screen share volume UI is hidden when screen share has no audio", async ()
       expanded={false}
       onToggleExpanded={toggleExpanded}
       showIndicators
+      showNameTags
+      showRingingStatus
       focusable
     />,
   );
@@ -139,4 +150,42 @@ test("Screen share volume UI is hidden when screen share has no audio", async ()
   expect(
     screen.queryByRole("button", { name: /volume/i }),
   ).not.toBeInTheDocument();
+});
+
+test("SpotlightTile displays ringing media", async () => {
+  const pickupState$ = new BehaviorSubject<
+    RingingMediaViewModel["pickupState$"]["value"]
+  >("ringing");
+  const vm = createRingingMedia({
+    pickupState$,
+    id: "test",
+    intent: "audio",
+    userId: "@alice:example.org",
+    displayName$: constant("Alice"),
+    mxcAvatarUrl$: constant(undefined),
+  });
+
+  const toggleExpanded = vi.fn();
+  const { container } = render(
+    <SpotlightTile
+      vm={new SpotlightTileViewModel(constant([vm]), constant(false))}
+      targetWidth={300}
+      targetHeight={200}
+      expanded={false}
+      onToggleExpanded={toggleExpanded}
+      showIndicators
+      showNameTags
+      showRingingStatus
+      focusable={true}
+    />,
+  );
+
+  expect(await axe(container)).toHaveNoViolations();
+  // Alice should be in the spotlight with the right status
+  screen.getByText("Alice");
+  screen.getByText("Calling…");
+
+  // Now we time out ringing to Alice
+  act(() => pickupState$.next("timeout"));
+  screen.getByText("Call ended");
 });

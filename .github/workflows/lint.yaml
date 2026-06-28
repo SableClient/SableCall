@@ -1,6 +1,8 @@
 name: Lint, format & type check
 on:
   pull_request: {}
+env:
+  PNPM_CONFIG_PM_ON_FAIL: ignore
 jobs:
   prettier:
     name: Lint, format & type check
@@ -10,22 +12,22 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - name: Enable Corepack
-        run: corepack enable
-      - name: Yarn cache
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - name: pnpm cache
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          cache: "yarn"
+          cache: "pnpm"
           node-version-file: ".node-version"
       - name: Install dependencies
-        run: "yarn install --immutable"
-      - name: Prettier
-        run: "yarn run prettier:check"
-      - name: i18n
-        run: "yarn run i18n:check"
-      - name: ESLint
-        run: "yarn run lint:eslint"
-      - name: Type check
-        run: "yarn run lint:types"
-      - name: Dead code analysis
-        run: "yarn run lint:knip"
+        run: "pnpm install --frozen-lockfile"
+      - name: format check
+        run: "pnpm run format:check"
+      - name: i18n check
+        run: "pnpm run i18n:check"
+      - name: oxlint
+        run: "pnpm run lint:oxlint"
+      - name: tsc
+        run: "pnpm run lint:types"
+      - name: knip
+        run: "pnpm run lint:knip"
