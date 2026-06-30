@@ -8,9 +8,9 @@ Please see LICENSE in the repository root for full details.
 import { type FC, type JSX, type Ref, useMemo } from "react";
 import classNames from "classnames";
 import {
-  SpotlightIcon,
-  GridIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  Presentation,
+  GridFour,
+} from "@phosphor-icons/react";
 import { Switch } from "@vector-im/compound-web";
 import { t } from "i18next";
 
@@ -317,10 +317,10 @@ export const CallFooter: FC<FooterProps> = ({ ref, children, vm }) => {
           aria-label={t("layout_switch_label")}
           leftLabel={t("layout_spotlight_label")}
           leftValue="spotlight"
-          leftIcon={SpotlightIcon}
+          leftIcon={Presentation}
           rightLabel={t("layout_grid_label")}
           rightValue="grid"
-          rightIcon={GridIcon}
+          rightIcon={GridFour}
           className={styles.layout}
           value={layoutMode}
           onChange={setLayoutMode}

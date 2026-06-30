@@ -8,9 +8,9 @@ Please see LICENSE in the repository root for full details.
 import { useState, type FC } from "react";
 import { Button, Text } from "@vector-im/compound-web";
 import {
-  MicOnSolidIcon,
-  VideoCallSolidIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  Microphone,
+  VideoCamera,
+} from "@phosphor-icons/react";
 import classNames from "classnames";
 
 import { Modal } from "./Modal";
@@ -89,7 +89,7 @@ export const RTCConnectionStats: FC<Props> = ({
             onClick={() => showFullModal("audio")}
             size="md"
             kind="tertiary"
-            Icon={MicOnSolidIcon}
+            Icon={(props) => <Microphone weight="fill" {...props} />}
           >
             {"jitter" in audio && typeof audio.jitter === "number" && (
               <Text as="span" size="xs" title="jitter">
@@ -105,7 +105,7 @@ export const RTCConnectionStats: FC<Props> = ({
             onClick={() => showFullModal("video")}
             size="md"
             kind="tertiary"
-            Icon={VideoCallSolidIcon}
+            Icon={(props) => <VideoCamera weight="fill" {...props} />}
           >
             {!!video?.framesPerSecond && (
               <Text as="span" size="xs" title="frame rate">

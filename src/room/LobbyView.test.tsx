@@ -12,9 +12,9 @@ import { TooltipProvider } from "@vector-im/compound-web";
 import { type MatrixClient } from "matrix-js-sdk";
 import { axe } from "vitest-axe";
 import {
-  ArrowLeftIcon,
-  ChevronLeftIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  ArrowLeft,
+  CaretLeft,
+} from "@phosphor-icons/react";
 
 import { LobbyView } from "./LobbyView";
 import { E2eeType } from "../e2ee/e2eeType";
@@ -140,7 +140,7 @@ describe("LobbyView", () => {
     getByRole("banner");
     // Check that the primary button uses ArrowLeftIcon (the back/return icon),
     // not the default CollapseIcon
-    const { container: iconContainer } = render(<ArrowLeftIcon />);
+    const { container: iconContainer } = render(<ArrowLeft />);
     const expectedSvgPath = iconContainer
       .querySelector("path")!
       .getAttribute("d");
@@ -164,7 +164,7 @@ describe("LobbyView", () => {
     getByRole("banner");
     // Check that the primary button uses ArrowLeftIcon (the back/return icon),
     // not the default CollapseIcon
-    const { container: iconContainer } = render(<ChevronLeftIcon />);
+    const { container: iconContainer } = render(<CaretLeft />);
     const expectedSvgPath = iconContainer
       .querySelector("path")!
       .getAttribute("d");

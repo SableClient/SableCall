@@ -6,7 +6,7 @@ Please see LICENSE in the repository root for full details.
 */
 
 import { useTranslation } from "react-i18next";
-import { PopOutIcon } from "@vector-im/compound-design-tokens/assets/web/icons";
+import { ArrowSquareOut } from "@phosphor-icons/react";
 
 import type { FC, ReactNode } from "react";
 import { ErrorView } from "./ErrorView";
@@ -34,7 +34,7 @@ const OpenElsewhere: FC = () => {
   return (
     <ErrorView
       widget={widget}
-      Icon={PopOutIcon}
+      Icon={ArrowSquareOut}
       title={t("error.open_elsewhere")}
     >
       <p>

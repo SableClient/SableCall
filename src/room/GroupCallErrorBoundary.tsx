@@ -16,11 +16,11 @@ import {
 } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import {
-  ErrorSolidIcon,
-  HostIcon,
-  OfflineIcon,
-  WebBrowserIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  Shield,
+  WifiSlash,
+  Browser,
+  Warning,
+} from "@phosphor-icons/react";
 import { Button } from "@vector-im/compound-web";
 import { logger } from "matrix-js-sdk/lib/logger";
 import { MatrixError } from "matrix-js-sdk";
@@ -60,16 +60,16 @@ const ErrorPage: FC<ErrorPageProps> = ({
   let icon: ComponentType<SVGAttributes<SVGElement>>;
   switch (error.category) {
     case ErrorCategory.CONFIGURATION_ISSUE:
-      icon = HostIcon;
+      icon = Shield;
       break;
     case ErrorCategory.NETWORK_CONNECTIVITY:
-      icon = OfflineIcon;
+      icon = WifiSlash;
       break;
     case ErrorCategory.CLIENT_CONFIGURATION:
-      icon = WebBrowserIcon;
+      icon = Browser;
       break;
     default:
-      icon = ErrorSolidIcon;
+      icon = Warning;
   }
 
   const actions: { label: string; onClick: () => void }[] = [];

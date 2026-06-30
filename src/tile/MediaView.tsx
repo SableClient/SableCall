@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import classNames from "classnames";
 import { VideoTrack } from "@livekit/components-react";
 import { Text, Tooltip } from "@vector-im/compound-web";
-import { ErrorSolidIcon } from "@vector-im/compound-design-tokens/assets/web/icons";
+import { Warning } from "@phosphor-icons/react";
 
 import styles from "./MediaView.module.css";
 import { Avatar } from "../Avatar";
@@ -101,7 +101,8 @@ export const MediaView: FC<Props> = ({
       isTriggerInteractive={false}
       nonInteractiveTriggerTabIndex={focusable ? undefined : -1}
     >
-      <ErrorSolidIcon
+      <Warning
+        weight="fill"
         width={20}
         height={20}
         className={styles.errorIcon}

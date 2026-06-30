@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
 Please see LICENSE in the repository root for full details.
 */
 
-import { type ComponentType, useState, type FC, useEffect } from "react";
+import { useState, type FC, useEffect } from "react";
 import {
   Button,
   Menu,
@@ -13,13 +13,13 @@ import {
   ToggleMenuItem,
 } from "@vector-im/compound-web";
 import {
-  CheckIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
-  MicOnIcon,
-  SpinnerIcon,
-  VideoCallIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  Microphone,
+  Spinner,
+  VideoCamera,
+  Check,
+  CaretUp,
+  CaretDown,
+} from "@phosphor-icons/react";
 import classNames from "classnames";
 import { useTranslation } from "react-i18next";
 
@@ -124,18 +124,18 @@ export const MediaMuteAndSwitchButton: FC<MediaMuteAndSwitchButtonProps> = ({
       break;
   }
 
-  let IconOptions: ComponentType<React.SVGAttributes<SVGElement>> | undefined;
+  let IconOptions: React.ElementType;
   let optionsButtonLabel: string;
   let numberedLabel: (number: number) => string;
   switch (iconsAndLabels) {
     case "video":
-      IconOptions = VideoCallIcon;
+      IconOptions = VideoCamera;
       optionsButtonLabel = t("settings.devices.camera");
       numberedLabel = (n): string =>
         t("settings.devices.camera_numbered", { n });
       break;
     case "audio":
-      IconOptions = MicOnIcon;
+      IconOptions = Microphone;
       optionsButtonLabel = t("settings.devices.microphone");
       numberedLabel = (n): string =>
         t("settings.devices.microphone_numbered", { n });
@@ -164,7 +164,7 @@ export const MediaMuteAndSwitchButton: FC<MediaMuteAndSwitchButtonProps> = ({
               [styles.menuButton]: true,
               [styles.chevronIconOpen]: menuOpen,
             })}
-            Icon={menuOpen ? ChevronUpIcon : ChevronDownIcon}
+            Icon={menuOpen ? CaretUp : CaretDown}
             kind={"tertiary"}
             size="lg"
             aria-label={optionsButtonLabel}
@@ -202,9 +202,9 @@ export const MediaMuteAndSwitchButton: FC<MediaMuteAndSwitchButtonProps> = ({
               }}
               key={id}
             >
-              {selectedOption === id && <CheckIcon width={24} height={24} />}
+              {selectedOption === id && <Check width={24} height={24} />}
               {selectedOption !== id && plannedSelection === id && (
-                <SpinnerIcon width={24} height={24} className={styles.rotate} />
+                <Spinner width={24} height={24} className={styles.rotate} />
               )}
             </MenuItem>
           );

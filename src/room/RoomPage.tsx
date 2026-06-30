@@ -18,9 +18,9 @@ import { type MatrixError } from "matrix-js-sdk";
 import { logger } from "matrix-js-sdk/lib/logger";
 import { Trans, useTranslation } from "react-i18next";
 import {
-  CheckIcon,
-  UnknownSolidIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  Check,
+  Question,
+} from "@phosphor-icons/react";
 
 import { useClientLegacy } from "../ClientContext";
 import { ErrorPage, FullScreenView, LoadingPage } from "../FullScreenView";
@@ -149,7 +149,7 @@ export const RoomPage: FC = (): ReactNode => {
           ) : (
             <>
               {t("lobby.waiting_for_invite")}
-              <CheckIcon />
+              <Check width={24} height={24} aria-hidden />
             </>
           );
         return (
@@ -196,7 +196,7 @@ export const RoomPage: FC = (): ReactNode => {
           return (
             <FullScreenView>
               <ErrorView
-                Icon={UnknownSolidIcon}
+                Icon={(props) => <Question weight="fill" width={24} height={24} aria-hidden {...props} />}
                 title={t("error.call_not_found")}
                 widget={widget}
               >

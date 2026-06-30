@@ -7,10 +7,10 @@ Please see LICENSE in the repository root for full details.
 
 import { type FC } from "react";
 import {
-  VideoCallSolidIcon,
-  VoiceCallSolidIcon,
-  EndCallIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  VideoCamera,
+  Phone,
+  PhoneDisconnect,
+} from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 
 import { type RingingMediaViewModel } from "../state/media/RingingMediaViewModel";
@@ -26,13 +26,13 @@ export const RingingStatus: FC<Props> = ({ vm }) => {
   const Icon =
     pickupState === "ringing"
       ? vm.intent === "video"
-        ? VideoCallSolidIcon
-        : VoiceCallSolidIcon
-      : EndCallIcon;
+        ? VideoCamera
+        : Phone
+      : PhoneDisconnect;
 
   return (
     <>
-      <Icon aria-hidden />
+      <Icon weight="fill" aria-hidden />
       {pickupState === "ringing"
         ? t("video_tile.calling")
         : t("video_tile.call_ended")}

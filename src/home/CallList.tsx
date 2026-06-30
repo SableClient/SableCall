@@ -10,7 +10,7 @@ import { type RoomMember, type Room, type MatrixClient } from "matrix-js-sdk";
 import { type FC, useCallback, type MouseEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { IconButton, Text } from "@vector-im/compound-web";
-import { CloseIcon } from "@vector-im/compound-design-tokens/assets/web/icons";
+import { X } from "@phosphor-icons/react";
 import classNames from "classnames";
 
 import { Avatar, Size } from "../Avatar";
@@ -84,7 +84,7 @@ const CallTile: FC<CallTileProps> = ({ name, avatarUrl, room, client }) => {
         disabled={isLeaving}
         aria-label={t("action.remove")}
       >
-        <CloseIcon />
+        <X aria-hidden />
       </IconButton>
     </>
   );

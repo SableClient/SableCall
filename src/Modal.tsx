@@ -17,7 +17,7 @@ import {
 } from "@radix-ui/react-dialog";
 import { Drawer } from "vaul";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-import { CloseIcon } from "@vector-im/compound-design-tokens/assets/web/icons";
+import { X } from "@phosphor-icons/react";
 import classNames from "classnames";
 import { Heading, Glass } from "@vector-im/compound-web";
 
@@ -147,7 +147,7 @@ export const Modal: FC<Props> = ({
             data-testid="modal_close"
             aria-label={t("action.close")}
           >
-            <CloseIcon width={20} height={20} />
+            <X aria-hidden width={20} height={20} />
           </DialogClose>
         )}
       </div>
