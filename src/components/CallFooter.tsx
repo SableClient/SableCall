@@ -20,6 +20,7 @@ import {
   EndCallButton,
   MicButton,
   VideoButton,
+  DeafenButton,
   ShareScreenButton,
   SettingsButton,
   ReactionToggleButton,
@@ -58,6 +59,7 @@ export type FooterSnapshot = FooterActions & FooterState;
 export interface FooterActions {
   /** Also controls if the audioMute button is disabled */
   toggleAudio: (() => void) | undefined;
+  toggleAudioOutput: (() => void) | undefined;
   /** Also controls if the videoMute button is disabled */
   toggleVideo: (() => void) | undefined;
   toggleBlur: (() => void) | undefined;
@@ -73,6 +75,8 @@ export interface FooterActions {
 export interface FooterState {
   audioEnabled: boolean;
   audioBusy: boolean;
+  audioOutputEnabled: boolean;
+  audioOutputBusy: boolean;
   videoEnabled: boolean;
   videoBusy: boolean;
   videoBlurEnabled: boolean;
@@ -103,11 +107,14 @@ export interface FooterState {
 
   /** Providing no options `[]` or `undefined` will imply that we dont have a audio fast switcher */
   audioOptions: MenuOptions[];
+  audioOutputOptions: MenuOptions[];
   /** Providing no options `[]` or `undefined` will imply that we dont have a audio fast switcher */
   videoOptions: MenuOptions[];
   selectedAudio: string | undefined;
+  selectedAudioOutput: string | undefined;
   selectedVideo: string | undefined;
   selectAudioButtonOption: ((deviceId: string) => void) | undefined;
+  selectAudioOutputButtonOption: ((deviceId: string) => void) | undefined;
   selectVideoButtonOption: ((option: string) => void) | undefined;
 }
 
@@ -125,9 +132,12 @@ export const CallFooter: FC<FooterProps> = ({ ref, children, vm }) => {
   const openSettings = useBehavior(vm.openSettings$);
   const audioEnabled = useBehavior(vm.audioEnabled$);
   const audioBusy = useBehavior(vm.audioBusy$);
+  const audioOutputEnabled = useBehavior(vm.audioOutputEnabled$);
+  const audioOutputBusy = useBehavior(vm.audioOutputBusy$);
   const videoEnabled = useBehavior(vm.videoEnabled$);
   const videoBusy = useBehavior(vm.videoBusy$);
   const toggleAudio = useBehavior(vm.toggleAudio$);
+  const toggleAudioOutput = useBehavior(vm.toggleAudioOutput$);
   const toggleVideo = useBehavior(vm.toggleVideo$);
   const sharingScreen = useBehavior(vm.sharingScreen$);
   const toggleScreenSharing = useBehavior(vm.toggleScreenSharing$);
@@ -140,8 +150,11 @@ export const CallFooter: FC<FooterProps> = ({ ref, children, vm }) => {
   const videoOptions = useBehavior(vm.videoOptions$);
   const selectedVideo = useBehavior(vm.selectedVideo$);
   const audioOptions = useBehavior(vm.audioOptions$);
+  const audioOutputOptions = useBehavior(vm.audioOutputOptions$);
   const selectedAudio = useBehavior(vm.selectedAudio$);
+  const selectedAudioOutput = useBehavior(vm.selectedAudioOutput$);
   const selectAudioButtonOption = useBehavior(vm.selectAudioButtonOption$);
+  const selectAudioOutputButtonOption = useBehavior(vm.selectAudioOutputButtonOption$);
   const selectVideoButtonOption = useBehavior(vm.selectVideoButtonOption$);
   const toggleBlur = useBehavior(vm.toggleBlur$);
   const videoBlurEnabled = useBehavior(vm.videoBlurEnabled$);
@@ -193,34 +206,66 @@ export const CallFooter: FC<FooterProps> = ({ ref, children, vm }) => {
     );
   }
 
-  if ((videoOptions?.length ?? 0) > 0) {
+  if ((audioOutputOptions?.length ?? 0) > 0) {
     buttons.push(
       <MediaMuteAndSwitchButton
-        title={"Camera Source"}
-        key="video"
-        iconsAndLabels="video"
-        enabled={videoEnabled ?? false}
-        busy={videoBusy ?? false}
-        onMuteClick={toggleVideo}
-        options={videoOptions}
-        selectedOption={selectedVideo}
-        onSelect={selectVideoButtonOption}
-        videoBlurToggleClick={toggleBlur}
-        videoBlurEnabled={videoBlurEnabled}
+        title={"Speaker Source"}
+        key="audioOutput"
+        iconsAndLabels="audioOutput"
+        enabled={audioOutputEnabled ?? false}
+        busy={audioOutputBusy ?? false}
+        onMuteClick={toggleAudioOutput}
+        data-testid="incall_deafen"
+        options={audioOutputOptions}
+        selectedOption={selectedAudioOutput}
+        onSelect={selectAudioOutputButtonOption}
       />,
     );
   } else {
     buttons.push(
-      <VideoButton
+      <DeafenButton
         size={buttonSize}
-        key="video"
-        enabled={videoEnabled ?? false}
-        busy={videoBusy ?? false}
-        onClick={toggleVideo}
-        disabled={(videoBusy ?? false) || toggleVideo === undefined}
-        data-testid="incall_videomute"
+        key="audioOutput"
+        enabled={audioOutputEnabled ?? false}
+        busy={audioOutputBusy ?? false}
+        onClick={toggleAudioOutput}
+        disabled={(audioOutputBusy ?? false) || toggleAudioOutput === undefined}
+        data-testid="incall_deafen"
       />,
     );
+  }
+
+  if (toggleVideo !== undefined) {
+    if ((videoOptions?.length ?? 0) > 0) {
+      buttons.push(
+        <MediaMuteAndSwitchButton
+          title={t("settings.devices.camera")}
+          key="video"
+          iconsAndLabels="video"
+          enabled={videoEnabled ?? false}
+          busy={videoBusy ?? false}
+          onMuteClick={toggleVideo}
+          data-testid="incall_videomute"
+          options={videoOptions}
+          selectedOption={selectedVideo}
+          onSelect={selectVideoButtonOption}
+          videoBlurEnabled={videoBlurEnabled}
+          videoBlurToggleClick={toggleBlur}
+        />,
+      );
+    } else {
+      buttons.push(
+        <VideoButton
+          size={buttonSize}
+          key="video"
+          enabled={videoEnabled ?? false}
+          busy={videoBusy ?? false}
+          onClick={toggleVideo}
+          disabled={(videoBusy ?? false) || toggleVideo === undefined}
+          data-testid="incall_videomute"
+        />,
+      );
+    }
   }
 
   if (toggleScreenSharing !== undefined) {
