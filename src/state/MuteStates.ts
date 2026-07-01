@@ -223,10 +223,10 @@ export class MuteStates {
       // Sync our mute states with the hosting client
       const widgetApiState$ = combineLatest(
         [this.audio.enabled$, this.video.enabled$, muteAllAudio$],
-        (audio, video, muteAllAudio) => ({ 
-          audio_enabled: audio, 
+        (audio, video, muteAllAudio) => ({
+          audio_enabled: audio,
           video_enabled: video,
-          audio_output_enabled: !muteAllAudio
+          audio_output_enabled: !muteAllAudio,
         }),
       );
       widgetApiState$.pipe(this.scope.bind()).subscribe((state) => {
@@ -276,9 +276,15 @@ export class MuteStates {
             ev.detail.data.audio_output_enabled != null &&
             typeof ev.detail.data.audio_output_enabled === "boolean"
           ) {
-            (newState as any).audio_output_enabled = ev.detail.data.audio_output_enabled;
-            if (muteAllAudioSetting.getValue() === ev.detail.data.audio_output_enabled) {
-              muteAllAudioSetting.setValue(!ev.detail.data.audio_output_enabled);
+            (newState as any).audio_output_enabled =
+              ev.detail.data.audio_output_enabled;
+            if (
+              muteAllAudioSetting.getValue() ===
+              ev.detail.data.audio_output_enabled
+            ) {
+              muteAllAudioSetting.setValue(
+                !ev.detail.data.audio_output_enabled,
+              );
             }
           }
           widget!.api.transport.reply(ev.detail, newState);

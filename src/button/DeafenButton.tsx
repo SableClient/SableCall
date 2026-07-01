@@ -1,14 +1,14 @@
+/*
+Copyright 2024 New Vector Ltd.
+
+SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
+Please see LICENSE in the repository root for full details.
+*/
+
 import { type ComponentPropsWithoutRef, type FC } from "react";
 import classNames from "classnames";
-import {
-  Button as CpdButton,
-  Tooltip,
-} from "@vector-im/compound-web";
-import {
-  Headphones,
-  SpeakerSlash,
-  Spinner,
-} from "@phosphor-icons/react";
+import { Button as CpdButton, Tooltip } from "@vector-im/compound-web";
+import { Headphones, SpeakerSlash, Spinner } from "@phosphor-icons/react";
 
 import styles from "./Button.module.css";
 
@@ -18,9 +18,17 @@ interface DeafenButtonProps extends ComponentPropsWithoutRef<"button"> {
   size?: "md" | "lg";
 }
 
-export const DeafenButton: FC<DeafenButtonProps> = ({ enabled, busy, ...props }) => {
-  const Icon = busy ? Spinner : enabled ? (p: any) => <Headphones {...p} /> : (p: any) => <SpeakerSlash weight="fill" {...p} />;
-  
+export const DeafenButton: FC<DeafenButtonProps> = ({
+  enabled,
+  busy,
+  ...props
+}) => {
+  const Icon = busy
+    ? Spinner
+    : enabled
+      ? (p: any) => <Headphones {...p} />
+      : (p: any) => <SpeakerSlash weight="fill" {...p} />;
+
   // Using generic labels for now, these can be added to i18n later if needed
   const label = enabled ? "Deafen" : "Undeafen";
 

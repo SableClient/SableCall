@@ -30,8 +30,6 @@ export default {
     // We obviously use this, but if the package has been linked with pnpm link,
     // then Knip will flag it as a false positive
     // https://github.com/webpro-nl/knip/issues/766
-    "@vector-im/compound-web",
-    "matrix-widget-api",
     // Used by oxlint
     "eslint-plugin-element-call",
     "eslint-plugin-storybook",

@@ -195,7 +195,12 @@ const UserMediaTile: FC<UserMediaTileProps> = ({
       })}
       nameTagLeadingIcon={
         playbackMuted ? (
-          <SpeakerSlash width={20} height={20} aria-label={audioIconLabel} className={styles.muteIcon} />
+          <SpeakerSlash
+            width={20}
+            height={20}
+            aria-label={audioIconLabel}
+            className={styles.muteIcon}
+          />
         ) : (
           <AudioIcon
             width={20}
@@ -220,7 +225,15 @@ const UserMediaTile: FC<UserMediaTileProps> = ({
                 aria-label={t("common.options")}
                 tabIndex={focusable ? undefined : -1}
               >
-                <DotsThreeOutline aria-hidden width={18} height={18} style={{ transform: "scale(0.75)", transformOrigin: "center" }} />
+                <DotsThreeOutline
+                  aria-hidden
+                  width={18}
+                  height={18}
+                  style={{
+                    transform: "scale(0.75)",
+                    transformOrigin: "center",
+                  }}
+                />
               </button>
             }
             side="left"

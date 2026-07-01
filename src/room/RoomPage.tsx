@@ -17,10 +17,7 @@ import {
 import { type MatrixError } from "matrix-js-sdk";
 import { logger } from "matrix-js-sdk/lib/logger";
 import { Trans, useTranslation } from "react-i18next";
-import {
-  Check,
-  Question,
-} from "@phosphor-icons/react";
+import { Check, Question } from "@phosphor-icons/react";
 
 import { useClientLegacy } from "../ClientContext";
 import { ErrorPage, FullScreenView, LoadingPage } from "../FullScreenView";
@@ -196,7 +193,15 @@ export const RoomPage: FC = (): ReactNode => {
           return (
             <FullScreenView>
               <ErrorView
-                Icon={(props) => <Question weight="fill" width={24} height={24} aria-hidden {...props} />}
+                Icon={(props) => (
+                  <Question
+                    weight="fill"
+                    width={24}
+                    height={24}
+                    aria-hidden
+                    {...props}
+                  />
+                )}
                 title={t("error.call_not_found")}
                 widget={widget}
               >

@@ -6,11 +6,7 @@ Please see LICENSE in the repository root for full details.
 */
 
 import { type FC } from "react";
-import {
-  VideoCamera,
-  Phone,
-  PhoneDisconnect,
-} from "@phosphor-icons/react";
+import { VideoCamera, Phone, PhoneDisconnect } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 
 import { type RingingMediaViewModel } from "../state/media/RingingMediaViewModel";

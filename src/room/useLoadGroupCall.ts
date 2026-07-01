@@ -28,11 +28,7 @@ import {
 import { logger } from "matrix-js-sdk/lib/logger";
 import { type MatrixRTCSession } from "matrix-js-sdk/lib/matrixrtc";
 import { useTranslation } from "react-i18next";
-import {
-  Shield,
-  X,
-  PhoneDisconnect,
-} from "@phosphor-icons/react";
+import { Shield, X, PhoneDisconnect } from "@phosphor-icons/react";
 
 import { widget } from "../widget";
 

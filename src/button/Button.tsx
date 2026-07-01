@@ -41,7 +41,11 @@ interface MicButtonProps extends ComponentPropsWithoutRef<"button"> {
 
 export const MicButton: FC<MicButtonProps> = ({ enabled, busy, ...props }) => {
   const { t } = useTranslation();
-  const Icon = busy ? Spinner : enabled ? (p: any) => <Microphone {...p} /> : (p: any) => <MicrophoneSlash weight="fill" {...p} />;
+  const Icon = busy
+    ? Spinner
+    : enabled
+      ? (p: any) => <Microphone {...p} />
+      : (p: any) => <MicrophoneSlash weight="fill" {...p} />;
   const label = enabled
     ? t("mute_microphone_button_label")
     : t("unmute_microphone_button_label");
@@ -173,7 +177,13 @@ export const LoudspeakerButton: FC<LoudspeakerButtonProps> = ({
     <Tooltip label={label}>
       <CpdButton
         iconOnly
-        children={loudspeakerModeEnabled ? <SpeakerHigh aria-hidden /> : <SpeakerSlash weight="fill" aria-hidden />}
+        children={
+          loudspeakerModeEnabled ? (
+            <SpeakerHigh aria-hidden />
+          ) : (
+            <SpeakerSlash weight="fill" aria-hidden />
+          )
+        }
         {...props}
         kind={loudspeakerModeEnabled ? "secondary" : "primary"}
         aria-checked={loudspeakerModeEnabled}
@@ -209,7 +219,10 @@ export const SettingsIconButton: FC<SettingsIconButtonProps> = ({
         className={classNamesForScreenWidth(className, showForScreenWidth)}
         {...props}
       >
-        <DotsThreeOutlineVertical aria-hidden style={{ transform: "scale(0.75)", transformOrigin: "center" }} />
+        <DotsThreeOutlineVertical
+          aria-hidden
+          style={{ transform: "scale(0.75)", transformOrigin: "center" }}
+        />
       </IconButton>
     </Tooltip>
   );
@@ -232,8 +245,16 @@ export const SettingsButton: FC<SettingsButtonProps> = ({
         className={classNamesForScreenWidth(className, showForScreenWidth)}
         iconOnly
         Icon={(p: any) => {
-          const IconComp = platform === "android" ? DotsThreeOutlineVertical : DotsThreeOutline;
-          return <IconComp {...p} style={{ transform: "scale(0.75)", transformOrigin: "center" }} />;
+          const IconComp =
+            platform === "android"
+              ? DotsThreeOutlineVertical
+              : DotsThreeOutline;
+          return (
+            <IconComp
+              {...p}
+              style={{ transform: "scale(0.75)", transformOrigin: "center" }}
+            />
+          );
         }}
         kind={"secondary"}
         {...props}

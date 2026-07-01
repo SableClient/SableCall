@@ -15,12 +15,7 @@ import {
   useCallback,
 } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import {
-  Shield,
-  WifiSlash,
-  Browser,
-  Warning,
-} from "@phosphor-icons/react";
+import { Shield, WifiSlash, Browser, Warning } from "@phosphor-icons/react";
 import { Button } from "@vector-im/compound-web";
 import { logger } from "matrix-js-sdk/lib/logger";
 import { MatrixError } from "matrix-js-sdk";

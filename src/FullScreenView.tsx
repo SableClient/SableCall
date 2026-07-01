@@ -67,7 +67,9 @@ export const ErrorPage = ({ error, widget }: ErrorPageProps): ReactElement => {
       ) : (
         <ErrorView
           widget={widget}
-          Icon={() => <Warning weight="fill" width={24} height={24} aria-hidden />}
+          Icon={() => (
+            <Warning weight="fill" width={24} height={24} aria-hidden />
+          )}
           title={t("error.generic")}
           rageshake
           fatal

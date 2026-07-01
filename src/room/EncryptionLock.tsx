@@ -8,10 +8,7 @@ Please see LICENSE in the repository root for full details.
 import { type FC } from "react";
 import { Tooltip } from "@vector-im/compound-web";
 import { useTranslation } from "react-i18next";
-import {
-  Lock,
-  LockOpen,
-} from "@phosphor-icons/react";
+import { Lock, LockOpen } from "@phosphor-icons/react";
 
 import styles from "./EncryptionLock.module.css";
 

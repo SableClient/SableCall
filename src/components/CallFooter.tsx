@@ -7,10 +7,7 @@ Please see LICENSE in the repository root for full details.
 
 import { type FC, type JSX, type Ref, useMemo } from "react";
 import classNames from "classnames";
-import {
-  Presentation,
-  GridFour,
-} from "@phosphor-icons/react";
+import { Presentation, GridFour } from "@phosphor-icons/react";
 import { Switch } from "@vector-im/compound-web";
 import { t } from "i18next";
 
@@ -154,7 +151,9 @@ export const CallFooter: FC<FooterProps> = ({ ref, children, vm }) => {
   const selectedAudio = useBehavior(vm.selectedAudio$);
   const selectedAudioOutput = useBehavior(vm.selectedAudioOutput$);
   const selectAudioButtonOption = useBehavior(vm.selectAudioButtonOption$);
-  const selectAudioOutputButtonOption = useBehavior(vm.selectAudioOutputButtonOption$);
+  const selectAudioOutputButtonOption = useBehavior(
+    vm.selectAudioOutputButtonOption$,
+  );
   const selectVideoButtonOption = useBehavior(vm.selectVideoButtonOption$);
   const toggleBlur = useBehavior(vm.toggleBlur$);
   const videoBlurEnabled = useBehavior(vm.videoBlurEnabled$);

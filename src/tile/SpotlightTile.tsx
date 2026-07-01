@@ -21,10 +21,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@vector-im/compound-design-tokens/assets/web/icons";
-import {
-  SpeakerHigh,
-  SpeakerSlash,
-} from "@phosphor-icons/react";
+import { SpeakerHigh, SpeakerSlash } from "@phosphor-icons/react";
 import { animated } from "@react-spring/web";
 import { type Observable, map } from "rxjs";
 import { useObservableRef } from "observable-hooks";
@@ -344,7 +341,11 @@ const ScreenShareVolumeButton: FC<ScreenShareVolumeButtonProps> = ({ vm }) => {
             className={styles.expand}
             aria-label={t("video_tile.screen_share_volume")}
           >
-            {playbackMuted ? <SpeakerSlash size={20} /> : <SpeakerHigh size={20} />}
+            {playbackMuted ? (
+              <SpeakerSlash size={20} />
+            ) : (
+              <SpeakerHigh size={20} />
+            )}
           </button>
         }
       >
@@ -356,7 +357,11 @@ const ScreenShareVolumeButton: FC<ScreenShareVolumeButtonProps> = ({ vm }) => {
           hideChevron={true}
         >
           <button className={styles.menuMuteButton} onClick={onMuteButtonClick}>
-            {playbackMuted ? <SpeakerSlash aria-hidden width={24} height={24} /> : <SpeakerHigh aria-hidden width={24} height={24} />}
+            {playbackMuted ? (
+              <SpeakerSlash aria-hidden width={24} height={24} />
+            ) : (
+              <SpeakerHigh aria-hidden width={24} height={24} />
+            )}
           </button>
           <Slider
             className={styles.volumeSlider}

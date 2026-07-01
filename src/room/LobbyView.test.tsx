@@ -11,10 +11,7 @@ import { BrowserRouter } from "react-router-dom";
 import { TooltipProvider } from "@vector-im/compound-web";
 import { type MatrixClient } from "matrix-js-sdk";
 import { axe } from "vitest-axe";
-import {
-  ArrowLeft,
-  CaretLeft,
-} from "@phosphor-icons/react";
+import { ArrowLeft, CaretLeft } from "@phosphor-icons/react";
 
 import { LobbyView } from "./LobbyView";
 import { E2eeType } from "../e2ee/e2eeType";

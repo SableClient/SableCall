@@ -18,11 +18,7 @@ import {
 } from "react";
 import classNames from "classnames";
 import { Heading, IconButton, Text, Tooltip } from "@vector-im/compound-web";
-import {
-  ArrowLeft,
-  CaretLeft,
-  CornersIn,
-} from "@phosphor-icons/react";
+import { ArrowLeft, CaretLeft, CornersIn } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { logger } from "matrix-js-sdk/lib/logger";
 

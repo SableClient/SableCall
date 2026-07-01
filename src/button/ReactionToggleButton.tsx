@@ -6,12 +6,7 @@ Please see LICENSE in the repository root for full details.
 */
 
 import { Button as CpdButton, Tooltip, Alert } from "@vector-im/compound-web";
-import {
-  CaretDown,
-  CaretUp,
-  Smiley,
-  HandPalm,
-} from "@phosphor-icons/react";
+import { CaretDown, CaretUp, Smiley, HandPalm } from "@phosphor-icons/react";
 import {
   type ComponentPropsWithoutRef,
   type FC,
@@ -156,7 +151,11 @@ export function ReactionPopupMenu({
               kind="tertiary"
               onClick={() => setExpanded(!isFullyExpanded)}
             >
-              {isFullyExpanded ? <CaretUp aria-hidden /> : <CaretDown aria-hidden />}
+              {isFullyExpanded ? (
+                <CaretUp aria-hidden />
+              ) : (
+                <CaretDown aria-hidden />
+              )}
             </CpdButton>
           </Tooltip>
         </section>

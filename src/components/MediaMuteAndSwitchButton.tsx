@@ -26,7 +26,10 @@ import { useTranslation } from "react-i18next";
 
 import styles from "./MediaMuteAndSwitchButton.module.css";
 import { MicButton, VideoButton, DeafenButton } from "../button";
-import { type DeviceLabel, type AudioOutputDeviceLabel } from "../state/MediaDevices";
+import {
+  type DeviceLabel,
+  type AudioOutputDeviceLabel,
+} from "../state/MediaDevices";
 import { useMediaDevices } from "../MediaDevicesContext";
 
 export interface MenuOptions {
@@ -158,7 +161,7 @@ export const MediaMuteAndSwitchButton: FC<MediaMuteAndSwitchButtonProps> = ({
       break;
     case "audioOutput":
       IconOptions = Headphones;
-      optionsButtonLabel = t("settings.devices.loudspeaker") ?? "Audio Output";
+      optionsButtonLabel = "Audio Output Options";
       numberedLabel = (n): string => `Speaker ${n}`;
       break;
   }
@@ -209,7 +212,9 @@ export const MediaMuteAndSwitchButton: FC<MediaMuteAndSwitchButtonProps> = ({
                 labelText = t("settings.devices.handset") ?? "Earpiece";
                 break;
               case "default":
-                labelText = label.name ? `${t("settings.devices.default", "Default")} (${label.name})` : t("settings.devices.default", "Default");
+                labelText = label.name
+                  ? `${t("settings.devices.default", "Default")} (${label.name})`
+                  : t("settings.devices.default", "Default");
                 break;
             }
             return (

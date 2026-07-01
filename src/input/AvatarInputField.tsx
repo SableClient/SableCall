@@ -17,11 +17,7 @@ import {
 import classNames from "classnames";
 import { useTranslation } from "react-i18next";
 import { Button, Menu, MenuItem } from "@vector-im/compound-web";
-import {
-  Trash,
-  PencilSimple,
-  Upload,
-} from "@phosphor-icons/react";
+import { Trash, PencilSimple, Upload } from "@phosphor-icons/react";
 
 import { Avatar, Size } from "../Avatar";
 import styles from "./AvatarInputField.module.css";

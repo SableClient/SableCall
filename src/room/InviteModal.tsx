@@ -15,10 +15,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { type Room } from "matrix-js-sdk";
 import { Button, Text } from "@vector-im/compound-web";
-import {
-  Link,
-  Check,
-} from "@phosphor-icons/react";
+import { Link, Check } from "@phosphor-icons/react";
 import copy from "copy-to-clipboard";
 
 import { Modal } from "../Modal";

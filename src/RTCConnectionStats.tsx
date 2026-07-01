@@ -7,10 +7,7 @@ Please see LICENSE in the repository root for full details.
 
 import { useState, type FC } from "react";
 import { Button, Text } from "@vector-im/compound-web";
-import {
-  Microphone,
-  VideoCamera,
-} from "@phosphor-icons/react";
+import { Microphone, VideoCamera } from "@phosphor-icons/react";
 import classNames from "classnames";
 
 import { Modal } from "./Modal";
