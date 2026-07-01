@@ -19,7 +19,7 @@ import {
   Check,
   CaretUp,
   CaretDown,
-  SpeakerHigh,
+  Headphones,
 } from "@phosphor-icons/react";
 import classNames from "classnames";
 import { useTranslation } from "react-i18next";
@@ -157,7 +157,7 @@ export const MediaMuteAndSwitchButton: FC<MediaMuteAndSwitchButtonProps> = ({
         t("settings.devices.microphone_numbered", { n });
       break;
     case "audioOutput":
-      IconOptions = SpeakerHigh;
+      IconOptions = Headphones;
       optionsButtonLabel = t("settings.devices.loudspeaker") ?? "Audio Output";
       numberedLabel = (n): string => `Speaker ${n}`;
       break;
@@ -248,6 +248,7 @@ export const MediaMuteAndSwitchButton: FC<MediaMuteAndSwitchButtonProps> = ({
           {(toggles?.length ?? 0) > 0 && <hr />}
           {toggles?.map((toggle) => (
             <ToggleMenuItem
+              className={styles.menuItem}
               label={toggle.label}
               onSelect={(e) => {
                 videoBlurToggleClick?.();
