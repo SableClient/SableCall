@@ -6,12 +6,7 @@ Please see LICENSE in the repository root for full details.
 */
 
 import { Button as CpdButton, Tooltip, Alert } from "@vector-im/compound-web";
-import {
-  RaisedHandSolidIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  ReactionSolidIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+import { CaretDown, CaretUp, Smiley, HandPalm } from "@phosphor-icons/react";
 import {
   type ComponentPropsWithoutRef,
   type FC,
@@ -53,7 +48,7 @@ const InnerButton: FC<InnerButtonProps> = ({ raised, open, ...props }) => {
         aria-haspopup
         kind={raised || open ? "primary" : "secondary"}
         iconOnly
-        Icon={raised ? RaisedHandSolidIcon : ReactionSolidIcon}
+        Icon={raised ? HandPalm : Smiley}
         {...props}
       />
     </Tooltip>
@@ -102,7 +97,7 @@ export function ReactionPopupMenu({
               aria-label={label}
               onClick={() => toggleRaisedHand()}
               iconOnly
-              Icon={RaisedHandSolidIcon}
+              Icon={HandPalm}
             />
           </Tooltip>
         </section>
@@ -153,10 +148,15 @@ export function ReactionPopupMenu({
               aria-label={
                 isFullyExpanded ? t("action.show_less") : t("action.show_more")
               }
-              Icon={isFullyExpanded ? ChevronUpIcon : ChevronDownIcon}
               kind="tertiary"
               onClick={() => setExpanded(!isFullyExpanded)}
-            />
+            >
+              {isFullyExpanded ? (
+                <CaretUp aria-hidden />
+              ) : (
+                <CaretDown aria-hidden />
+              )}
+            </CpdButton>
           </Tooltip>
         </section>
       </div>

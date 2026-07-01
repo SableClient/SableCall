@@ -40,7 +40,8 @@ export enum ElementWidgetActions {
   // The data of the widget action request and the response are:
   // {
   //   audio_enabled?: boolean,
-  //   video_enabled?: boolean
+  //   video_enabled?: boolean,
+  //   audio_output_enabled?: boolean
   // }
   DeviceMute = "io.element.device_mute",
 }

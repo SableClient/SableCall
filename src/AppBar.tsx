@@ -18,11 +18,7 @@ import {
 } from "react";
 import classNames from "classnames";
 import { Heading, IconButton, Text, Tooltip } from "@vector-im/compound-web";
-import {
-  ArrowLeftIcon,
-  ChevronLeftIcon,
-  CollapseIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+import { ArrowLeft, CaretLeft, CornersIn } from "@phosphor-icons/react";
 import { useTranslation } from "react-i18next";
 import { logger } from "matrix-js-sdk/lib/logger";
 
@@ -81,7 +77,7 @@ export const AppBar: FC<Props> = ({ children }) => {
     ],
   );
 
-  const BackIcon = platform === "android" ? ArrowLeftIcon : ChevronLeftIcon;
+  const BackIcon = platform === "android" ? ArrowLeft : CaretLeft;
 
   return (
     <>
@@ -100,7 +96,7 @@ export const AppBar: FC<Props> = ({ children }) => {
               {primaryButtonIcon === "back" ? (
                 <BackIcon aria-hidden />
               ) : (
-                <CollapseIcon aria-hidden />
+                <CornersIn aria-hidden />
               )}
             </IconButton>
           </Tooltip>

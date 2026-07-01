@@ -14,7 +14,9 @@ import { type MediaDevices } from "../state/MediaDevices";
 import {
   backgroundBlur as backgroundBlurSettings,
   debugTileLayout as debugTileLayoutSetting,
+  muteAllAudio as muteAllAudioSetting,
 } from "../settings/settings";
+import { muteAllAudio$ } from "../state/MuteAllAudioModel";
 import { type Behavior, constant } from "../state/Behavior";
 import type { ObservableScope } from "../state/ObservableScope";
 import { type MuteStates } from "../state/MuteStates";
@@ -35,6 +37,9 @@ function buildMuteBehaviors(
   | "audioEnabled$"
   | "audioBusy$"
   | "toggleAudio$"
+  | "audioOutputEnabled$"
+  | "audioOutputBusy$"
+  | "toggleAudioOutput$"
   | "videoEnabled$"
   | "videoBusy$"
   | "toggleVideo$"
@@ -44,6 +49,13 @@ function buildMuteBehaviors(
     audioBusy$: muteStates.audio.syncing$,
     toggleAudio$: scope.behavior(
       muteStates.audio.toggle$.pipe(map((t) => t ?? undefined)),
+    ),
+    audioOutputEnabled$: scope.behavior(
+      muteAllAudio$.pipe(map((muted) => !muted)),
+    ),
+    audioOutputBusy$: constant(false),
+    toggleAudioOutput$: constant(() =>
+      muteAllAudioSetting.setValue(!muteAllAudioSetting.getValue()),
     ),
     videoEnabled$: muteStates.video.enabled$,
     videoBusy$: muteStates.video.syncing$,
@@ -67,6 +79,9 @@ function buildDeviceBehaviors(
   | "audioOptions$"
   | "selectedAudio$"
   | "selectAudioButtonOption$"
+  | "audioOutputOptions$"
+  | "selectedAudioOutput$"
+  | "selectAudioOutputButtonOption$"
   | "videoOptions$"
   | "selectedVideo$"
   | "selectVideoButtonOption$"
@@ -94,6 +109,26 @@ function buildDeviceBehaviors(
       mediaDevices.audioInput.selected$.pipe(map((s) => s?.id)),
     ),
     selectAudioButtonOption$: constant(mediaDevices.audioInput.select),
+    audioOutputOptions$: scope.behavior(
+      disableSwitcher$.pipe(
+        switchMap((disable) =>
+          disable
+            ? constant([] as MenuOptions[])
+            : mediaDevices.audioOutput.available$.pipe(
+                map((available) =>
+                  [...available.entries()].map(([id, label]) => ({
+                    id,
+                    label,
+                  })),
+                ),
+              ),
+        ),
+      ),
+    ),
+    selectedAudioOutput$: scope.behavior(
+      mediaDevices.audioOutput.selected$.pipe(map((s) => s?.id)),
+    ),
+    selectAudioOutputButtonOption$: constant(mediaDevices.audioOutput.select),
     videoOptions$: scope.behavior(
       disableSwitcher$.pipe(
         switchMap((disable) =>
@@ -253,11 +288,14 @@ export function createLobbyFooterViewModel(
       debugTileLayout: false,
       showFooter: true,
       toggleAudio: undefined,
+      toggleAudioOutput: undefined,
       toggleVideo: undefined,
       setLayoutMode: undefined,
       toggleScreenSharing: undefined,
       audioEnabled: undefined,
       audioBusy: false,
+      audioOutputEnabled: undefined,
+      audioOutputBusy: false,
       videoEnabled: undefined,
       videoBusy: false,
       layoutMode: undefined,
@@ -267,10 +305,13 @@ export function createLobbyFooterViewModel(
       reactionData: undefined,
       tileStoreGeneration: undefined,
       audioOptions: undefined,
+      audioOutputOptions: undefined,
       videoOptions: undefined,
       selectedAudio: undefined,
+      selectedAudioOutput: undefined,
       selectedVideo: undefined,
       selectAudioButtonOption: undefined,
+      selectAudioOutputButtonOption: undefined,
       selectVideoButtonOption: undefined,
     }),
     ...buildMuteBehaviors(scope, muteStates),

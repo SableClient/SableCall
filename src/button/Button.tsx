@@ -14,18 +14,20 @@ import {
   Tooltip,
 } from "@vector-im/compound-web";
 import {
-  MicOnSolidIcon,
-  MicOffSolidIcon,
-  SpinnerIcon,
-  VideoCallSolidIcon,
-  VideoCallOffSolidIcon,
-  EndCallIcon,
-  ShareScreenSolidIcon,
-  OverflowHorizontalIcon,
-  OverflowVerticalIcon,
-  VolumeOnSolidIcon,
-  VolumeOffSolidIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  Microphone,
+  MicrophoneSlash,
+  Spinner,
+  VideoCamera,
+  VideoCameraSlash,
+  PhoneDisconnect,
+  MonitorArrowUp,
+} from "@phosphor-icons/react";
+import {
+  DotsThreeOutlineVertical,
+  DotsThreeOutline,
+  SpeakerHigh,
+  SpeakerSlash,
+} from "@phosphor-icons/react";
 
 import styles from "./Button.module.css";
 import callFooterStyles from "../components/CallFooter.module.css";
@@ -39,7 +41,11 @@ interface MicButtonProps extends ComponentPropsWithoutRef<"button"> {
 
 export const MicButton: FC<MicButtonProps> = ({ enabled, busy, ...props }) => {
   const { t } = useTranslation();
-  const Icon = busy ? SpinnerIcon : enabled ? MicOnSolidIcon : MicOffSolidIcon;
+  const Icon = busy
+    ? Spinner
+    : enabled
+      ? (p: any) => <Microphone {...p} />
+      : (p: any) => <MicrophoneSlash weight="fill" {...p} />;
   const label = enabled
     ? t("mute_microphone_button_label")
     : t("unmute_microphone_button_label");
@@ -76,10 +82,10 @@ export const VideoButton: FC<VideoButtonProps> = ({
 }) => {
   const { t } = useTranslation();
   const Icon = busy
-    ? SpinnerIcon
+    ? Spinner
     : enabled
-      ? VideoCallSolidIcon
-      : VideoCallOffSolidIcon;
+      ? (p: any) => <VideoCamera {...p} />
+      : (p: any) => <VideoCameraSlash weight="fill" {...p} />;
   const label = enabled
     ? t("stop_video_button_label")
     : t("start_video_button_label");
@@ -121,7 +127,7 @@ export const ShareScreenButton: FC<ShareScreenButtonProps> = ({
     <Tooltip label={label}>
       <CpdButton
         iconOnly
-        Icon={ShareScreenSolidIcon}
+        Icon={MonitorArrowUp}
         kind={enabled ? "primary" : "secondary"}
         role="switch"
         aria-checked={enabled}
@@ -146,7 +152,7 @@ export const EndCallButton: FC<EndCallButtonProps> = ({
       <CpdButton
         className={classNames(className, styles.endCall)}
         iconOnly
-        Icon={EndCallIcon}
+        Icon={PhoneDisconnect}
         destructive
         {...props}
       />
@@ -171,7 +177,13 @@ export const LoudspeakerButton: FC<LoudspeakerButtonProps> = ({
     <Tooltip label={label}>
       <CpdButton
         iconOnly
-        Icon={loudspeakerModeEnabled ? VolumeOnSolidIcon : VolumeOffSolidIcon}
+        children={
+          loudspeakerModeEnabled ? (
+            <SpeakerHigh aria-hidden />
+          ) : (
+            <SpeakerSlash weight="fill" aria-hidden />
+          )
+        }
         {...props}
         kind={loudspeakerModeEnabled ? "secondary" : "primary"}
         aria-checked={loudspeakerModeEnabled}
@@ -201,15 +213,16 @@ export const SettingsIconButton: FC<SettingsIconButtonProps> = ({
   ...props
 }) => {
   const { t } = useTranslation();
-  const Icon =
-    platform === "android" ? OverflowVerticalIcon : OverflowHorizontalIcon;
   return (
     <Tooltip label={t("common.settings")}>
       <IconButton
         className={classNamesForScreenWidth(className, showForScreenWidth)}
         {...props}
       >
-        <Icon aria-hidden />
+        <DotsThreeOutlineVertical
+          aria-hidden
+          style={{ transform: "scale(0.75)", transformOrigin: "center" }}
+        />
       </IconButton>
     </Tooltip>
   );
@@ -231,9 +244,18 @@ export const SettingsButton: FC<SettingsButtonProps> = ({
       <CpdButton
         className={classNamesForScreenWidth(className, showForScreenWidth)}
         iconOnly
-        Icon={
-          platform === "android" ? OverflowVerticalIcon : OverflowHorizontalIcon
-        }
+        Icon={(p: any) => {
+          const IconComp =
+            platform === "android"
+              ? DotsThreeOutlineVertical
+              : DotsThreeOutline;
+          return (
+            <IconComp
+              {...p}
+              style={{ transform: "scale(0.75)", transformOrigin: "center" }}
+            />
+          );
+        }}
         kind={"secondary"}
         {...props}
       />

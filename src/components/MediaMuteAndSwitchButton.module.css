@@ -20,11 +20,39 @@ Please see LICENSE in the repository root for full details.
   color: var(--cpd-color-icon-on-solid-primary);
 }
 .menuButton {
-  width: 40px;
+  width: 24px !important;
+  padding: 0 !important;
   background-color: transparent !important;
 }
 .itemIcon {
   color: var(--cpd-color-text-secondary);
+}
+
+.menuItem {
+  display: flex !important;
+  align-items: center !important;
+  padding: 8px 16px !important;
+  gap: 12px;
+}
+
+.menuItem > :nth-child(2) {
+  flex-grow: 1;
+  text-align: left;
+}
+
+.iconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.scrollableArea {
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .rotate {

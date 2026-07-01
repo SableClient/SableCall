@@ -28,11 +28,7 @@ import {
 import { logger } from "matrix-js-sdk/lib/logger";
 import { type MatrixRTCSession } from "matrix-js-sdk/lib/matrixrtc";
 import { useTranslation } from "react-i18next";
-import {
-  AdminIcon,
-  CloseIcon,
-  EndCallIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+import { Shield, X, PhoneDisconnect } from "@phosphor-icons/react";
 
 import { widget } from "../widget";
 
@@ -136,7 +132,7 @@ export const useLoadGroupCall = (
   const bannedError = useCallback(
     (): CallTerminatedMessage =>
       new CallTerminatedMessage(
-        AdminIcon,
+        Shield,
         t("group_call_loader.banned_heading"),
         t("group_call_loader.banned_body"),
         leaveReason(),
@@ -146,7 +142,7 @@ export const useLoadGroupCall = (
   const knockRejectError = useCallback(
     (): CallTerminatedMessage =>
       new CallTerminatedMessage(
-        CloseIcon,
+        X,
         t("group_call_loader.knock_reject_heading"),
         t("group_call_loader.knock_reject_body"),
         leaveReason(),
@@ -156,7 +152,7 @@ export const useLoadGroupCall = (
   const removeNoticeError = useCallback(
     (): CallTerminatedMessage =>
       new CallTerminatedMessage(
-        EndCallIcon,
+        PhoneDisconnect,
         t("group_call_loader.call_ended_heading"),
         t("group_call_loader.call_ended_body"),
         leaveReason(),

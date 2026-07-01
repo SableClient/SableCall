@@ -19,17 +19,15 @@ import { type animated } from "@react-spring/web";
 import classNames from "classnames";
 import { useTranslation } from "react-i18next";
 import {
-  MicOnSolidIcon,
-  MicOffSolidIcon,
-  MicOffIcon,
-  OverflowHorizontalIcon,
-  VolumeOnIcon,
-  VolumeOffIcon,
-  VisibilityOnIcon,
-  UserProfileIcon,
-  VolumeOffSolidIcon,
-  SwitchCameraSolidIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  User,
+  SpeakerSlash,
+  SpeakerHigh,
+  ArrowsClockwise,
+  Microphone,
+  MicrophoneSlash,
+  DotsThreeOutline,
+  Eye,
+} from "@phosphor-icons/react";
 import {
   ContextMenu,
   MenuItem,
@@ -155,10 +153,10 @@ const UserMediaTile: FC<UserMediaTileProps> = ({
   }, [targetWidth, targetHeight, vm]);
 
   const AudioIcon = playbackMuted
-    ? VolumeOffSolidIcon
+    ? (props: any) => <SpeakerSlash weight="fill" {...props} />
     : audioEnabled
-      ? MicOnSolidIcon
-      : MicOffSolidIcon;
+      ? (props: any) => <Microphone weight="fill" {...props} />
+      : (props: any) => <MicrophoneSlash weight="fill" {...props} />;
   const audioIconLabel = playbackMuted
     ? t("video_tile.muted_for_me")
     : audioEnabled
@@ -196,13 +194,22 @@ const UserMediaTile: FC<UserMediaTileProps> = ({
         [styles.handRaised]: !showSpeaking && handRaised,
       })}
       nameTagLeadingIcon={
-        <AudioIcon
-          width={20}
-          height={20}
-          aria-label={audioIconLabel}
-          data-muted={playbackMuted || !audioEnabled}
-          className={styles.muteIcon}
-        />
+        playbackMuted ? (
+          <SpeakerSlash
+            width={20}
+            height={20}
+            aria-label={audioIconLabel}
+            className={styles.muteIcon}
+          />
+        ) : (
+          <AudioIcon
+            width={20}
+            height={20}
+            aria-label={audioIconLabel}
+            data-muted={!audioEnabled}
+            className={styles.muteIcon}
+          />
+        )
       }
       displayName={displayName}
       mxcAvatarUrl={mxcAvatarUrl}
@@ -218,7 +225,15 @@ const UserMediaTile: FC<UserMediaTileProps> = ({
                 aria-label={t("common.options")}
                 tabIndex={focusable ? undefined : -1}
               >
-                <OverflowHorizontalIcon aria-hidden width={20} height={20} />
+                <DotsThreeOutline
+                  aria-hidden
+                  width={18}
+                  height={18}
+                  style={{
+                    transform: "scale(0.75)",
+                    transformOrigin: "center",
+                  }}
+                />
               </button>
             }
             side="left"
@@ -293,13 +308,13 @@ const LocalUserMediaTile: FC<LocalUserMediaTileProps> = ({
             onClick={switchCamera}
             tabIndex={focusable ? undefined : -1}
           >
-            <SwitchCameraSolidIcon aria-hidden width={20} height={20} />
+            <ArrowsClockwise weight="fill" width={20} height={20} aria-hidden />
           </button>
         )
       }
       menuStart={
         <ToggleMenuItem
-          Icon={VisibilityOnIcon}
+          Icon={Eye}
           label={t("video_tile.always_show")}
           checked={alwaysShow}
           onSelect={onSelectAlwaysShow}
@@ -308,7 +323,7 @@ const LocalUserMediaTile: FC<LocalUserMediaTileProps> = ({
       menuEnd={
         onOpenProfile && (
           <MenuItem
-            Icon={UserProfileIcon}
+            Icon={User}
             label={t("common.profile")}
             onSelect={onOpenProfile}
           />
@@ -347,7 +362,7 @@ const RemoteUserMediaTile: FC<RemoteUserMediaTileProps> = ({
     [vm],
   );
 
-  const VolumeIcon = playbackMuted ? VolumeOffIcon : VolumeOnIcon;
+  const VolumeIcon = playbackMuted ? SpeakerSlash : SpeakerHigh;
 
   return (
     <UserMediaTile
@@ -359,7 +374,7 @@ const RemoteUserMediaTile: FC<RemoteUserMediaTileProps> = ({
       menuStart={
         <>
           <ToggleMenuItem
-            Icon={MicOffIcon}
+            Icon={MicrophoneSlash}
             label={t("video_tile.mute_for_me")}
             checked={playbackMuted}
             onSelect={onSelectMute}

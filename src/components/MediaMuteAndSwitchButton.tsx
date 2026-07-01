@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
 Please see LICENSE in the repository root for full details.
 */
 
-import { type ComponentType, useState, type FC, useEffect } from "react";
+import { useState, type FC, useEffect } from "react";
 import {
   Button,
   Menu,
@@ -13,23 +13,27 @@ import {
   ToggleMenuItem,
 } from "@vector-im/compound-web";
 import {
-  CheckIcon,
-  ChevronUpIcon,
-  ChevronDownIcon,
-  MicOnIcon,
-  SpinnerIcon,
-  VideoCallIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+  Microphone,
+  Spinner,
+  VideoCamera,
+  Check,
+  CaretUp,
+  CaretDown,
+  Headphones,
+} from "@phosphor-icons/react";
 import classNames from "classnames";
 import { useTranslation } from "react-i18next";
 
 import styles from "./MediaMuteAndSwitchButton.module.css";
-import { MicButton, VideoButton } from "../button";
-import { type DeviceLabel } from "../state/MediaDevices";
+import { MicButton, VideoButton, DeafenButton } from "../button";
+import {
+  type DeviceLabel,
+  type AudioOutputDeviceLabel,
+} from "../state/MediaDevices";
 import { useMediaDevices } from "../MediaDevicesContext";
 
 export interface MenuOptions {
-  label: DeviceLabel;
+  label: DeviceLabel | AudioOutputDeviceLabel;
   id: string;
 }
 
@@ -42,7 +46,7 @@ export interface MediaMuteAndSwitchButtonProps {
   onMuteClick?: () => void;
   /** True while mute/unmute operation is syncing. */
   busy?: boolean;
-  iconsAndLabels: "video" | "audio";
+  iconsAndLabels: "video" | "audio" | "audioOutput";
   /** The options available for the media device selector modal */
   options?: MenuOptions[];
   /** The option that will currently be rendered as the selected option */
@@ -122,23 +126,43 @@ export const MediaMuteAndSwitchButton: FC<MediaMuteAndSwitchButtonProps> = ({
         />
       );
       break;
+    case "audioOutput":
+      button = (
+        <DeafenButton
+          enabled={enabled ?? false}
+          busy={isBusy}
+          onClick={(e) => {
+            onMuteClick?.();
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          disabled={isBusy || onMuteClick === undefined}
+          data-testid="incall_deafen"
+        />
+      );
+      break;
   }
 
-  let IconOptions: ComponentType<React.SVGAttributes<SVGElement>> | undefined;
+  let IconOptions: React.ElementType;
   let optionsButtonLabel: string;
   let numberedLabel: (number: number) => string;
   switch (iconsAndLabels) {
     case "video":
-      IconOptions = VideoCallIcon;
+      IconOptions = VideoCamera;
       optionsButtonLabel = t("settings.devices.camera");
       numberedLabel = (n): string =>
         t("settings.devices.camera_numbered", { n });
       break;
     case "audio":
-      IconOptions = MicOnIcon;
+      IconOptions = Microphone;
       optionsButtonLabel = t("settings.devices.microphone");
       numberedLabel = (n): string =>
         t("settings.devices.microphone_numbered", { n });
+      break;
+    case "audioOutput":
+      IconOptions = Headphones;
+      optionsButtonLabel = "Audio Output Options";
+      numberedLabel = (n): string => `Speaker ${n}`;
       break;
   }
 
@@ -164,63 +188,82 @@ export const MediaMuteAndSwitchButton: FC<MediaMuteAndSwitchButtonProps> = ({
               [styles.menuButton]: true,
               [styles.chevronIconOpen]: menuOpen,
             })}
-            Icon={menuOpen ? ChevronUpIcon : ChevronDownIcon}
+            Icon={menuOpen ? CaretUp : CaretDown}
             kind={"tertiary"}
             size="lg"
             aria-label={optionsButtonLabel}
           />
         }
       >
-        {options?.map(({ label, id }) => {
-          let labelText: string;
-          switch (label.type) {
-            case "name":
-              labelText = label.name;
-              break;
-            case "number":
-              labelText = numberedLabel(label.number);
-              break;
-          }
-          return (
-            <MenuItem
-              hideChevron
-              label={labelText}
-              Icon={
-                IconOptions && (
-                  <IconOptions
-                    width={24}
-                    height={24}
-                    className={styles.itemIcon}
-                  />
-                )
-              }
+        <div className={styles.scrollableArea}>
+          {options?.map(({ label, id }) => {
+            let labelText: string = "";
+            switch (label.type) {
+              case "name":
+                labelText = label.name;
+                break;
+              case "number":
+                labelText = numberedLabel(label.number);
+                break;
+              case "speaker":
+                labelText = t("settings.devices.loudspeaker") ?? "Speaker";
+                break;
+              case "earpiece":
+                labelText = t("settings.devices.handset") ?? "Earpiece";
+                break;
+              case "default":
+                labelText = label.name
+                  ? `${t("settings.devices.default", "Default")} (${label.name})`
+                  : t("settings.devices.default", "Default");
+                break;
+            }
+            return (
+              <MenuItem
+                hideChevron
+                className={styles.menuItem}
+                label={labelText}
+                Icon={
+                  IconOptions ? (
+                    <div className={styles.iconWrapper}>
+                      <IconOptions
+                        width={24}
+                        height={24}
+                        className={styles.itemIcon}
+                      />
+                    </div>
+                  ) : undefined
+                }
+                onSelect={(e) => {
+                  e.preventDefault();
+                  if (id === selectedOption) return;
+                  setPlannedSelection(id);
+                  onSelect?.(id);
+                }}
+                key={id}
+              >
+                <div className={styles.iconWrapper}>
+                  {selectedOption === id && <Check width={24} height={24} />}
+                  {selectedOption !== id && plannedSelection === id && (
+                    <Spinner width={24} height={24} className={styles.rotate} />
+                  )}
+                </div>
+              </MenuItem>
+            );
+          })}
+          {(toggles?.length ?? 0) > 0 && <hr />}
+          {toggles?.map((toggle) => (
+            <ToggleMenuItem
+              className={styles.menuItem}
+              label={toggle.label}
               onSelect={(e) => {
+                videoBlurToggleClick?.();
                 e.preventDefault();
-                if (id === selectedOption) return;
-                setPlannedSelection(id);
-                onSelect?.(id);
               }}
-              key={id}
-            >
-              {selectedOption === id && <CheckIcon width={24} height={24} />}
-              {selectedOption !== id && plannedSelection === id && (
-                <SpinnerIcon width={24} height={24} className={styles.rotate} />
-              )}
-            </MenuItem>
-          );
-        })}
-        {(toggles?.length ?? 0) > 0 && <hr />}
-        {toggles?.map((toggle) => (
-          <ToggleMenuItem
-            label={toggle.label}
-            onSelect={(e) => {
-              videoBlurToggleClick?.();
-              e.preventDefault();
-            }}
-            checked={toggle.enabled ?? false}
-            key={toggle.id}
-          />
-        ))}
+              checked={toggle.enabled ?? false}
+              key={toggle.id}
+            />
+          ))}
+        </div>
       </Menu>
     </div>
   );

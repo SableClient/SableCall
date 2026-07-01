@@ -116,14 +116,14 @@ body[data-platform="ios"] .drawer {
 }
 
 .dialog .body {
-  padding-inline: var(--cpd-space-10x);
-  padding-block: var(--cpd-space-10x) var(--cpd-space-12x);
+  padding-inline: var(--cpd-space-6x);
+  padding-block: var(--cpd-space-6x) var(--cpd-space-6x);
   overflow: auto;
 }
 
 .drawer .body {
   padding-inline: var(--cpd-space-4x);
-  padding-block: var(--cpd-space-9x) var(--cpd-space-10x);
+  padding-block: var(--cpd-space-4x) var(--cpd-space-4x);
 }
 
 .modal.tabbed .body {

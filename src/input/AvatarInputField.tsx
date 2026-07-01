@@ -17,11 +17,7 @@ import {
 import classNames from "classnames";
 import { useTranslation } from "react-i18next";
 import { Button, Menu, MenuItem } from "@vector-im/compound-web";
-import {
-  DeleteIcon,
-  EditIcon,
-  ShareIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+import { Trash, PencilSimple, Upload } from "@phosphor-icons/react";
 
 import { Avatar, Size } from "../Avatar";
 import styles from "./AvatarInputField.module.css";
@@ -111,7 +107,7 @@ export const AvatarInputField: FC<Props> = ({
             trigger={
               <Button
                 iconOnly
-                Icon={EditIcon}
+                Icon={PencilSimple}
                 kind="tertiary"
                 size="md"
                 aria-label={t("action.edit")}
@@ -119,12 +115,12 @@ export const AvatarInputField: FC<Props> = ({
             }
           >
             <MenuItem
-              Icon={ShareIcon}
+              Icon={Upload}
               label={t("action.upload_file")}
               onSelect={onSelectUpload}
             />
             <MenuItem
-              Icon={DeleteIcon}
+              Icon={Trash}
               label={t("action.remove")}
               kind="critical"
               onSelect={onSelectRemove}
@@ -134,7 +130,7 @@ export const AvatarInputField: FC<Props> = ({
           <Button
             type="button"
             iconOnly
-            Icon={EditIcon}
+            Icon={PencilSimple}
             kind="tertiary"
             size="md"
             aria-label={t("action.edit")}

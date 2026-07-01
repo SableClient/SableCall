@@ -10,7 +10,7 @@ import { type Ref, type FC, type HTMLAttributes, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Heading, Text } from "@vector-im/compound-web";
-import { UserProfileIcon } from "@vector-im/compound-design-tokens/assets/web/icons";
+import { User } from "@phosphor-icons/react";
 
 import styles from "./Header.module.css";
 import Logo from "./icons/Logo.svg?react";
@@ -166,7 +166,7 @@ export const RoomHeaderInfo: FC<RoomHeaderInfoProps> = ({
       </div>
       {(participantCount ?? 0) > 0 && (
         <div className={styles.participantsLine}>
-          <UserProfileIcon
+          <User
             width={20}
             height={20}
             aria-label={t("header_participants_label")}

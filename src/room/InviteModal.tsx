@@ -15,10 +15,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { type Room } from "matrix-js-sdk";
 import { Button, Text } from "@vector-im/compound-web";
-import {
-  LinkIcon,
-  CheckIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+import { Link, Check } from "@phosphor-icons/react";
 import copy from "copy-to-clipboard";
 
 import { Modal } from "../Modal";
@@ -64,7 +61,7 @@ export const InviteModal: FC<Props> = ({ room, open, onDismiss }) => {
         </Text>
         <Button
           className={styles.button}
-          Icon={LinkIcon}
+          Icon={Link}
           onClick={onButtonClick}
           data-testid="modal_inviteLink"
         >
@@ -75,7 +72,7 @@ export const InviteModal: FC<Props> = ({ room, open, onDismiss }) => {
         open={toastOpen}
         onDismiss={onToastDismiss}
         autoDismiss={2000}
-        Icon={CheckIcon}
+        Icon={Check}
       >
         {t("invite_modal.link_copied_toast")}
       </Toast>

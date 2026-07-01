@@ -20,11 +20,8 @@ import {
   CollapseIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  VolumeOffIcon,
-  VolumeOnIcon,
-  VolumeOffSolidIcon,
-  VolumeOnSolidIcon,
 } from "@vector-im/compound-design-tokens/assets/web/icons";
+import { SpeakerHigh, SpeakerSlash } from "@phosphor-icons/react";
 import { animated } from "@react-spring/web";
 import { type Observable, map } from "rxjs";
 import { useObservableRef } from "observable-hooks";
@@ -323,11 +320,6 @@ const ScreenShareVolumeButton: FC<ScreenShareVolumeButtonProps> = ({ vm }) => {
   const playbackMuted = useBehavior(vm.playbackMuted$);
   const playbackVolume = useBehavior(vm.playbackVolume$);
 
-  const VolumeIcon = playbackMuted ? VolumeOffIcon : VolumeOnIcon;
-  const VolumeSolidIcon = playbackMuted
-    ? VolumeOffSolidIcon
-    : VolumeOnSolidIcon;
-
   const [volumeMenuOpen, setVolumeMenuOpen] = useState(false);
   const onMuteButtonClick = useCallback(() => vm.togglePlaybackMuted(), [vm]);
   const onVolumeChange = useCallback(
@@ -349,7 +341,11 @@ const ScreenShareVolumeButton: FC<ScreenShareVolumeButtonProps> = ({ vm }) => {
             className={styles.expand}
             aria-label={t("video_tile.screen_share_volume")}
           >
-            <VolumeSolidIcon aria-hidden width={20} height={20} />
+            {playbackMuted ? (
+              <SpeakerSlash size={20} />
+            ) : (
+              <SpeakerHigh size={20} />
+            )}
           </button>
         }
       >
@@ -361,7 +357,11 @@ const ScreenShareVolumeButton: FC<ScreenShareVolumeButtonProps> = ({ vm }) => {
           hideChevron={true}
         >
           <button className={styles.menuMuteButton} onClick={onMuteButtonClick}>
-            <VolumeIcon aria-hidden width={24} height={24} />
+            {playbackMuted ? (
+              <SpeakerSlash aria-hidden width={24} height={24} />
+            ) : (
+              <SpeakerHigh aria-hidden width={24} height={24} />
+            )}
           </button>
           <Slider
             className={styles.volumeSlider}

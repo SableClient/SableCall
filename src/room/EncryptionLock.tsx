@@ -8,10 +8,7 @@ Please see LICENSE in the repository root for full details.
 import { type FC } from "react";
 import { Tooltip } from "@vector-im/compound-web";
 import { useTranslation } from "react-i18next";
-import {
-  LockSolidIcon,
-  LockOffIcon,
-} from "@vector-im/compound-design-tokens/assets/web/icons";
+import { Lock, LockOpen } from "@phosphor-icons/react";
 
 import styles from "./EncryptionLock.module.css";
 
@@ -21,7 +18,7 @@ interface Props {
 
 export const EncryptionLock: FC<Props> = ({ encrypted }) => {
   const { t } = useTranslation();
-  const Icon = encrypted ? LockSolidIcon : LockOffIcon;
+  const Icon = encrypted ? Lock : LockOpen;
   const label = encrypted ? t("common.encrypted") : t("common.unencrypted");
 
   return (

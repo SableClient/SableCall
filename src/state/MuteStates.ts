@@ -27,6 +27,8 @@ import { type MediaDevices, type MediaDevice } from "../state/MediaDevices";
 import { ElementWidgetActions, widget } from "../widget";
 import { type ObservableScope } from "./ObservableScope";
 import { type Behavior, constant } from "./Behavior";
+import { muteAllAudio as muteAllAudioSetting } from "../settings/settings";
+import { muteAllAudio$ } from "./MuteAllAudioModel";
 
 interface MuteStateData {
   enabled$: Observable<boolean>;
@@ -220,8 +222,12 @@ export class MuteStates {
     if (widget !== null) {
       // Sync our mute states with the hosting client
       const widgetApiState$ = combineLatest(
-        [this.audio.enabled$, this.video.enabled$],
-        (audio, video) => ({ audio_enabled: audio, video_enabled: video }),
+        [this.audio.enabled$, this.video.enabled$, muteAllAudio$],
+        (audio, video, muteAllAudio) => ({
+          audio_enabled: audio,
+          video_enabled: video,
+          audio_output_enabled: !muteAllAudio,
+        }),
       );
       widgetApiState$.pipe(this.scope.bind()).subscribe((state) => {
         widget!.api.transport
@@ -265,6 +271,21 @@ export class MuteStates {
           ) {
             newState.video_enabled = ev.detail.data.video_enabled;
             setVideoEnabled(newState.video_enabled);
+          }
+          if (
+            ev.detail.data.audio_output_enabled != null &&
+            typeof ev.detail.data.audio_output_enabled === "boolean"
+          ) {
+            (newState as any).audio_output_enabled =
+              ev.detail.data.audio_output_enabled;
+            if (
+              muteAllAudioSetting.getValue() ===
+              ev.detail.data.audio_output_enabled
+            ) {
+              muteAllAudioSetting.setValue(
+                !ev.detail.data.audio_output_enabled,
+              );
+            }
           }
           widget!.api.transport.reply(ev.detail, newState);
         });
