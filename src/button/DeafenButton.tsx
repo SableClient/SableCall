@@ -19,7 +19,7 @@ interface DeafenButtonProps extends ComponentPropsWithoutRef<"button"> {
 }
 
 export const DeafenButton: FC<DeafenButtonProps> = ({ enabled, busy, ...props }) => {
-  const Icon = busy ? Spinner : enabled ? (p: any) => <Headphones weight="fill" {...p} /> : (p: any) => <SpeakerSlash weight="fill" {...p} />;
+  const Icon = busy ? Spinner : enabled ? (p: any) => <Headphones {...p} /> : (p: any) => <SpeakerSlash weight="fill" {...p} />;
   
   // Using generic labels for now, these can be added to i18n later if needed
   const label = enabled ? "Deafen" : "Undeafen";

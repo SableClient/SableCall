@@ -41,7 +41,7 @@ interface MicButtonProps extends ComponentPropsWithoutRef<"button"> {
 
 export const MicButton: FC<MicButtonProps> = ({ enabled, busy, ...props }) => {
   const { t } = useTranslation();
-  const Icon = busy ? Spinner : enabled ? (p: any) => <Microphone weight="fill" {...p} /> : (p: any) => <MicrophoneSlash weight="fill" {...p} />;
+  const Icon = busy ? Spinner : enabled ? (p: any) => <Microphone {...p} /> : (p: any) => <MicrophoneSlash weight="fill" {...p} />;
   const label = enabled
     ? t("mute_microphone_button_label")
     : t("unmute_microphone_button_label");
@@ -80,7 +80,7 @@ export const VideoButton: FC<VideoButtonProps> = ({
   const Icon = busy
     ? Spinner
     : enabled
-      ? (p: any) => <VideoCamera weight="fill" {...p} />
+      ? (p: any) => <VideoCamera {...p} />
       : (p: any) => <VideoCameraSlash weight="fill" {...p} />;
   const label = enabled
     ? t("stop_video_button_label")
@@ -173,7 +173,7 @@ export const LoudspeakerButton: FC<LoudspeakerButtonProps> = ({
     <Tooltip label={label}>
       <CpdButton
         iconOnly
-        children={loudspeakerModeEnabled ? <SpeakerHigh weight="fill" aria-hidden /> : <SpeakerSlash weight="fill" aria-hidden />}
+        children={loudspeakerModeEnabled ? <SpeakerHigh aria-hidden /> : <SpeakerSlash weight="fill" aria-hidden />}
         {...props}
         kind={loudspeakerModeEnabled ? "secondary" : "primary"}
         aria-checked={loudspeakerModeEnabled}

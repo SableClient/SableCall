@@ -34,8 +34,8 @@ div.reactionPopupMenuRoot {
 }
 
 div.reactionPopupMenuRoot.reactionPopupMenuModal > div > div {
-  padding-inline: var(--cpd-space-6x);
-  padding-block: var(--cpd-space-6x);
+  padding-inline: var(--cpd-space-2x);
+  padding-block: var(--cpd-space-2x);
 }
 
 .reactionPopupMenu section {
