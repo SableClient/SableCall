@@ -793,7 +793,7 @@ export function createCallViewModel$(
           generateItems(
             "CallViewModel ringingMedia$",
             function* (pickupState) {
-              if (pickupState !== "accept")
+              if (pickupState === "ringing")
                 yield { keys: [intent, recipient], data: pickupState };
             },
             (scope, pickupState$, intent, userId) =>
