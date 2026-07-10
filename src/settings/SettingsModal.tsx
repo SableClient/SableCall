@@ -56,6 +56,8 @@ import {
   type VideoCodec,
   rnnoiseNoiseSuppression as rnnoiseNoiseSuppressionSetting,
   rnnoiseNoiseSuppressionPreset as rnnoiseNoiseSuppressionPresetSetting,
+  micCutoffEnabled as micCutoffEnabledSetting,
+  micCutoffThresholdDb as micCutoffThresholdDbSetting,
 } from "./settings";
 import { PreferencesSettingsTab } from "./PreferencesSettingsTab";
 import { Slider } from "../Slider";
@@ -66,11 +68,15 @@ import { FieldRow, InputField } from "../input/Input";
 import { useSubmitRageshake } from "./submit-rageshake";
 import { useUrlParams } from "../UrlParams";
 import { useBehavior } from "../useBehavior";
-import { supportsRNNoiseProcessor } from "../audio/RNNoiseProcessor";
+import {
+  microphoneInputLevelDb$,
+  supportsRNNoiseProcessor,
+} from "../audio/RNNoiseProcessor";
 import {
   type RNNoiseSuppressionPreset,
   rnnoiseSuppressionPresets,
 } from "../audio/rnnoiseTypes";
+import { MIC_CUTOFF_MAX_DB, MIC_CUTOFF_MIN_DB } from "../audio/microphoneGate";
 
 type SettingsTab =
   | "audio"
@@ -320,6 +326,72 @@ export const SettingsModal: FC<Props> = ({
     );
   };
 
+  const MicrophoneCutoffSettings: React.FC = (): ReactNode => {
+    const supported = supportsRNNoiseProcessor();
+    const [cutoffEnabled, setCutoffEnabled] = useSetting(
+      micCutoffEnabledSetting,
+    );
+    const [cutoffDb, setCutoffDb] = useSetting(micCutoffThresholdDbSetting);
+    const [cutoffDbRaw, setCutoffDbRaw] = useState(cutoffDb);
+    const effectiveCutoffEnabled = supported && !!cutoffEnabled;
+
+    // Live input level from the mic worklet, mapped onto the slider's range.
+    // Only flows while the processor is attached (i.e. during a call).
+    const inputLevelDb = useBehavior(microphoneInputLevelDb$);
+    const inputLevelFraction =
+      inputLevelDb === null
+        ? 0
+        : Math.max(
+            0,
+            Math.min(
+              1,
+              (inputLevelDb - MIC_CUTOFF_MIN_DB) /
+                (MIC_CUTOFF_MAX_DB - MIC_CUTOFF_MIN_DB),
+            ),
+          );
+
+    return (
+      <>
+        <h4>{t("settings.audio_tab.mic_cutoff_header")}</h4>
+        <FieldRow>
+          <InputField
+            id="activateMicCutoff"
+            label={t("settings.audio_tab.mic_cutoff_label")}
+            description={
+              supported
+                ? t("settings.audio_tab.mic_cutoff_description")
+                : t("settings.audio_tab.mic_cutoff_not_supported")
+            }
+            type="checkbox"
+            checked={effectiveCutoffEnabled}
+            onChange={(e): void => setCutoffEnabled(e.target.checked)}
+            disabled={!supported}
+          />
+        </FieldRow>
+        {effectiveCutoffEnabled && (
+          <div className={styles.volumeSlider}>
+            <label>
+              {t("settings.audio_tab.mic_cutoff_threshold_label")}
+              {": "}
+              <span className={styles.settingValue}>{cutoffDbRaw} dB</span>
+            </label>
+            <Slider
+              label={t("settings.audio_tab.mic_cutoff_threshold_label")}
+              value={cutoffDbRaw}
+              onValueChange={setCutoffDbRaw}
+              onValueCommit={setCutoffDb}
+              min={MIC_CUTOFF_MIN_DB}
+              max={MIC_CUTOFF_MAX_DB}
+              step={1}
+              tooltipFormatter={(v): string => `${v} dB`}
+              level={inputLevelFraction}
+            />
+          </div>
+        )}
+      </>
+    );
+  };
+
   const AudioProcessingSettings: React.FC = (): ReactNode => {
     const [echoCancellation, setEchoCancellation] = useSetting(
       echoCancellationSetting,
@@ -481,6 +553,8 @@ export const SettingsModal: FC<Props> = ({
           </div>
           <Separator />
           <RNNoiseCheckbox />
+          <Separator />
+          <MicrophoneCutoffSettings />
         </Form>
         <Separator />
         <AudioProcessingSettings />

@@ -8,6 +8,14 @@ Please see LICENSE in the repository root for full details.
 import createRNNWasmModuleSync from "@jitsi/rnnoise-wasm/dist/rnnoise-sync.js";
 
 import type { RNNoiseSuppressionPreset } from "./rnnoiseTypes";
+import {
+  GATE_CLOSE_MS,
+  GATE_HOLD_FRAMES,
+  GATE_HYSTERESIS_DB,
+  GATE_OPEN_MS,
+  LEVEL_REPORT_FRAMES,
+  MIC_CUTOFF_DEFAULT_DB,
+} from "./microphoneGate";
 
 declare abstract class AudioWorkletProcessor {
   protected constructor(options?: AudioWorkletNodeOptions);
@@ -43,7 +51,9 @@ type RNNoiseModule = {
 
 type WorkletMessage =
   | { type: "destroy" }
-  | { type: "preset"; preset: RNNoiseSuppressionPreset };
+  | { type: "preset"; preset: RNNoiseSuppressionPreset }
+  | { type: "denoise"; enabled: boolean }
+  | { type: "gate"; enabled: boolean; thresholdDb: number };
 
 const PRESETS: Record<RNNoiseSuppressionPreset, PresetConfig> = {
   conservative: {
@@ -81,6 +91,7 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
   private destroyed = false;
   private readonly inBuf = new Float32Array(RING_SIZE);
   private readonly outBuf = new Float32Array(RING_SIZE);
+  private readonly frameBuf = new Float32Array(FRAME_SIZE);
   private inW = 0;
   private inR = 0;
   private outW = 0;
@@ -88,6 +99,17 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
   private currentGain = 1;
   private targetGain = 1;
   private holdFrames = 0;
+  private denoiseEnabled = true;
+  private gateEnabled = false;
+  private gateOpenThresholdDb = MIC_CUTOFF_DEFAULT_DB;
+  private gateCloseThresholdDb = MIC_CUTOFF_DEFAULT_DB - GATE_HYSTERESIS_DB;
+  private gateHoldFrames = 0;
+  private gateCurrentGain = 1;
+  private gateTargetGain = 1;
+  private gateOpenStep = 1;
+  private gateCloseStep = 1;
+  private levelReportCounter = 0;
+  private levelReportMaxRms = 0;
   private maxAttenuationDb = PRESETS[DEFAULT_PRESET].maxAttenuationDb;
   private openThreshold = PRESETS[DEFAULT_PRESET].openThreshold;
   private closeThreshold = PRESETS[DEFAULT_PRESET].closeThreshold;
@@ -103,6 +125,8 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     super();
 
     this.setPreset(DEFAULT_PRESET);
+    this.gateOpenStep = this.smoothingStepFromMs(GATE_OPEN_MS);
+    this.gateCloseStep = this.smoothingStepFromMs(GATE_CLOSE_MS);
     this.initRNNoise();
 
     this.port.onmessage = (event: MessageEvent<WorkletMessage>): void => {
@@ -110,6 +134,10 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
         this.cleanup();
       } else if (event.data.type === "preset" && isPreset(event.data.preset)) {
         this.setPreset(event.data.preset);
+      } else if (event.data.type === "denoise") {
+        this.setDenoiseEnabled(event.data.enabled === true);
+      } else if (event.data.type === "gate") {
+        this.setGateConfig(event.data.enabled, event.data.thresholdDb);
       }
     };
   }
@@ -130,6 +158,63 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     this.holdFramesConfig = config.holdFrames;
     this.attenuateStep = this.smoothingStepFromMs(config.attenuateMs);
     this.releaseStep = this.smoothingStepFromMs(config.releaseMs);
+  }
+
+  private setDenoiseEnabled(enabled: boolean): void {
+    this.denoiseEnabled = enabled;
+    if (!enabled) {
+      // Release any RNNoise attenuation so the stage becomes transparent.
+      this.targetGain = 1;
+      this.holdFrames = 0;
+    }
+  }
+
+  private setGateConfig(enabled: unknown, thresholdDb: unknown): void {
+    this.gateEnabled = enabled === true;
+    if (typeof thresholdDb === "number" && Number.isFinite(thresholdDb)) {
+      this.gateOpenThresholdDb = thresholdDb;
+      this.gateCloseThresholdDb = thresholdDb - GATE_HYSTERESIS_DB;
+    }
+    if (!this.gateEnabled) {
+      this.gateTargetGain = 1;
+      this.gateCurrentGain = 1;
+      this.gateHoldFrames = 0;
+    }
+  }
+
+  private reportLevel(frameRms: number): void {
+    if (frameRms > this.levelReportMaxRms) {
+      this.levelReportMaxRms = frameRms;
+    }
+    this.levelReportCounter += 1;
+    if (this.levelReportCounter < LEVEL_REPORT_FRAMES) return;
+
+    const rmsDb =
+      this.levelReportMaxRms > 0
+        ? 20 * Math.log10(this.levelReportMaxRms)
+        : -200;
+    this.port.postMessage({ type: "level", rmsDb });
+    this.levelReportCounter = 0;
+    this.levelReportMaxRms = 0;
+  }
+
+  private updateGateGain(frameRms: number): void {
+    if (!this.gateEnabled) {
+      this.gateTargetGain = 1;
+      return;
+    }
+
+    const rmsDb = frameRms > 0 ? 20 * Math.log10(frameRms) : -200;
+    if (rmsDb >= this.gateOpenThresholdDb) {
+      this.gateHoldFrames = GATE_HOLD_FRAMES;
+      this.gateTargetGain = 1;
+    } else if (this.gateHoldFrames > 0) {
+      this.gateHoldFrames -= 1;
+    } else if (rmsDb < this.gateCloseThresholdDb) {
+      this.gateTargetGain = 0;
+    }
+    // Between the close and open thresholds the gate keeps its previous
+    // state (hysteresis).
   }
 
   private updateTargetGain(vadProbability: number): void {
@@ -197,35 +282,50 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     this.destroyed = true;
   }
 
-  private processRNNoiseFrame(): void {
-    if (
-      !this.module ||
-      this.state === null ||
-      this.pcmBuf === undefined ||
-      !this.heapF32
-    ) {
-      return;
-    }
+  private processFrame(): void {
+    const { module, state, pcmBuf, heapF32 } = this;
+    const useDenoise =
+      this.denoiseEnabled &&
+      this.ready &&
+      module !== undefined &&
+      state !== null &&
+      pcmBuf !== undefined &&
+      heapF32 !== undefined;
 
-    const heapIdx = this.pcmBuf >> 2;
+    let sumSquares = 0;
 
-    for (let i = 0; i < FRAME_SIZE; i++) {
-      this.heapF32[heapIdx + i] =
-        this.inBuf[(this.inR + i) % RING_SIZE] * 32768;
+    if (useDenoise) {
+      const heapIdx = pcmBuf >> 2;
+
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        heapF32[heapIdx + i] = this.inBuf[(this.inR + i) % RING_SIZE] * 32768;
+      }
+
+      const rnnoiseProcessFrame = module["_rnnoise_process_frame"] as (
+        state: number,
+        input: number,
+        output: number,
+      ) => number;
+      const vadProbability = rnnoiseProcessFrame(state, pcmBuf, pcmBuf);
+      this.updateTargetGain(vadProbability);
+
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        const sample = heapF32[heapIdx + i] / 32768;
+        this.frameBuf[i] = sample;
+        sumSquares += sample * sample;
+      }
+    } else {
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        const sample = this.inBuf[(this.inR + i) % RING_SIZE];
+        this.frameBuf[i] = sample;
+        sumSquares += sample * sample;
+      }
     }
     this.inR = (this.inR + FRAME_SIZE) % RING_SIZE;
 
-    const rnnoiseProcessFrame = this.module["_rnnoise_process_frame"] as (
-      state: number,
-      input: number,
-      output: number,
-    ) => number;
-    const vadProbability = rnnoiseProcessFrame(
-      this.state,
-      this.pcmBuf,
-      this.pcmBuf,
-    );
-    this.updateTargetGain(vadProbability);
+    const frameRms = Math.sqrt(sumSquares / FRAME_SIZE);
+    this.updateGateGain(frameRms);
+    this.reportLevel(frameRms);
 
     for (let i = 0; i < FRAME_SIZE; i++) {
       const smoothingStep =
@@ -233,8 +333,14 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
           ? this.attenuateStep
           : this.releaseStep;
       this.currentGain += (this.targetGain - this.currentGain) * smoothingStep;
+      const gateStep =
+        this.gateTargetGain < this.gateCurrentGain
+          ? this.gateCloseStep
+          : this.gateOpenStep;
+      this.gateCurrentGain +=
+        (this.gateTargetGain - this.gateCurrentGain) * gateStep;
       this.outBuf[(this.outW + i) % RING_SIZE] =
-        (this.heapF32[heapIdx + i] / 32768) * this.currentGain;
+        this.frameBuf[i] * this.currentGain * this.gateCurrentGain;
     }
     this.outW = (this.outW + FRAME_SIZE) % RING_SIZE;
   }
@@ -263,7 +369,9 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     const blockSize = output.length;
     const channelCount = inputChannels.length;
 
-    if (!this.ready) {
+    const framePathActive =
+      (this.denoiseEnabled && this.ready) || this.gateEnabled;
+    if (!framePathActive) {
       for (let i = 0; i < blockSize; i++) {
         output[i] = this.mixInputChannels(inputChannels, i, channelCount);
       }
@@ -280,7 +388,7 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     }
 
     while (this.ringAvailable(this.inW, this.inR) >= FRAME_SIZE) {
-      this.processRNNoiseFrame();
+      this.processFrame();
     }
 
     const outAvailable = this.ringAvailable(this.outW, this.outR);

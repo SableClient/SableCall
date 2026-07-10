@@ -11,6 +11,7 @@ import { logger } from "matrix-js-sdk/lib/logger";
 
 import {
   createRNNoiseWorkletCodeForTesting,
+  microphoneInputLevelDb$,
   RNNoiseProcessor,
   supportsRNNoiseProcessor,
 } from "./RNNoiseProcessor";
@@ -146,22 +147,20 @@ function expectedAttenuationDb(
   return attenuationProgress * config.maxAttenuationDb;
 }
 
-function instantiateWorkletProcessor(workletCode: string): {
+type TestWorklet = {
   process: (
     inputs: Float32Array[][],
     outputs: Float32Array[][],
     params?: Record<string, unknown>,
   ) => boolean;
-} {
-  let ProcessorCtor:
-    | (new () => {
-        process: (
-          inputs: Float32Array[][],
-          outputs: Float32Array[][],
-          params?: Record<string, unknown>,
-        ) => boolean;
-      })
-    | undefined;
+  port: {
+    postMessage: ReturnType<typeof vi.fn>;
+    onmessage: ((event: MessageEvent) => void) | null;
+  };
+};
+
+function instantiateWorkletProcessor(workletCode: string): TestWorklet {
+  let ProcessorCtor: (new () => TestWorklet) | undefined;
 
   class TestAudioWorkletProcessor {
     public readonly port = {
@@ -171,16 +170,7 @@ function instantiateWorkletProcessor(workletCode: string): {
   }
 
   const registerProcessor = vi.fn(
-    (
-      _name: string,
-      ctor: new () => {
-        process: (
-          inputs: Float32Array[][],
-          outputs: Float32Array[][],
-          params?: Record<string, unknown>,
-        ) => boolean;
-      },
-    ) => {
+    (_name: string, ctor: new () => TestWorklet) => {
       ProcessorCtor = ctor;
     },
   );
@@ -198,6 +188,26 @@ function instantiateWorkletProcessor(workletCode: string): {
   }
 
   return new ProcessorCtor();
+}
+
+const GATE_TEST_FRAME_SIZE = 480;
+
+function sendWorkletMessage(worklet: TestWorklet, data: unknown): void {
+  worklet.port.onmessage?.({ data } as MessageEvent);
+}
+
+/**
+ * Feeds one full 480-sample frame of constant amplitude through the worklet
+ * and returns the corresponding output frame.
+ */
+function processGateFrame(
+  worklet: TestWorklet,
+  amplitude: number,
+): Float32Array {
+  const input = new Float32Array(GATE_TEST_FRAME_SIZE).fill(amplitude);
+  const output = new Float32Array(GATE_TEST_FRAME_SIZE);
+  worklet.process([[input]], [[output]], {});
+  return output;
 }
 
 describe("RNNoiseProcessor", () => {
@@ -651,5 +661,266 @@ describe("RNNoiseProcessor", () => {
 
     // init() must have aborted after seeing destroyed=true; no track exposed
     expect(processor.processedTrack).toBeUndefined();
+  });
+
+  it("posts denoise and gate configuration to the worklet on init", async () => {
+    const t = createTestContext();
+    vi.stubGlobal(
+      "AudioWorkletNode",
+      class {
+        constructor() {
+          return t.workletNode;
+        }
+      },
+    );
+    const processor = new RNNoiseProcessor("balanced", false, {
+      enabled: true,
+      thresholdDb: -35,
+    });
+
+    await processor.init({
+      kind: Track.Kind.Audio,
+      track: t.track,
+      audioContext: t.audioContext,
+    });
+
+    expect(t.workletNode.port.postMessage).toHaveBeenCalledWith({
+      type: "denoise",
+      enabled: false,
+    });
+    expect(t.workletNode.port.postMessage).toHaveBeenCalledWith({
+      type: "gate",
+      enabled: true,
+      thresholdDb: -35,
+    });
+  });
+
+  it("updates the gate configuration at runtime", async () => {
+    const t = createTestContext();
+    vi.stubGlobal(
+      "AudioWorkletNode",
+      class {
+        constructor() {
+          return t.workletNode;
+        }
+      },
+    );
+    const processor = new RNNoiseProcessor();
+
+    await processor.init({
+      kind: Track.Kind.Audio,
+      track: t.track,
+      audioContext: t.audioContext,
+    });
+
+    processor.setGateConfig({ enabled: true, thresholdDb: -50 });
+
+    expect(t.workletNode.port.postMessage).toHaveBeenCalledWith({
+      type: "gate",
+      enabled: true,
+      thresholdDb: -50,
+    });
+  });
+
+  it("allows non-48kHz sample rates when only the gate is enabled", async () => {
+    const t = createTestContext(44100);
+    vi.stubGlobal(
+      "AudioWorkletNode",
+      class {
+        constructor() {
+          return t.workletNode;
+        }
+      },
+    );
+    const processor = new RNNoiseProcessor("conservative", false, {
+      enabled: true,
+      thresholdDb: -40,
+    });
+
+    await processor.init({
+      kind: Track.Kind.Audio,
+      track: t.track,
+      audioContext: t.audioContext,
+    });
+
+    expect(t.addModule).toHaveBeenCalledOnce();
+    expect(processor.processedTrack).toBe(t.processedTrack);
+  });
+
+  it("throws when enabling denoising on a non-48kHz context", async () => {
+    const t = createTestContext(44100);
+    vi.stubGlobal(
+      "AudioWorkletNode",
+      class {
+        constructor() {
+          return t.workletNode;
+        }
+      },
+    );
+    const processor = new RNNoiseProcessor("conservative", false, {
+      enabled: true,
+      thresholdDb: -40,
+    });
+
+    await processor.init({
+      kind: Track.Kind.Audio,
+      track: t.track,
+      audioContext: t.audioContext,
+    });
+
+    expect(() => processor.setDenoiseEnabled(true)).toThrow("48000Hz");
+  });
+
+  describe("microphone cutoff gate", () => {
+    it("passes input above the cutoff through unattenuated", () => {
+      const worklet = instantiateWorkletProcessor(getGeneratedWorkletCode());
+      sendWorkletMessage(worklet, {
+        type: "gate",
+        enabled: true,
+        thresholdDb: -40,
+      });
+
+      // 0.5 amplitude ≈ -6dBFS, well above the -40dB cutoff
+      let output: Float32Array = new Float32Array(GATE_TEST_FRAME_SIZE);
+      for (let i = 0; i < 5; i++) {
+        output = processGateFrame(worklet, 0.5);
+      }
+
+      for (const sample of output) {
+        expect(sample).toBeCloseTo(0.5, 6);
+      }
+    });
+
+    it("mutes sustained input below the cutoff", () => {
+      const worklet = instantiateWorkletProcessor(getGeneratedWorkletCode());
+      sendWorkletMessage(worklet, {
+        type: "gate",
+        enabled: true,
+        thresholdDb: -40,
+      });
+
+      // 0.0001 amplitude ≈ -80dBFS, well below the -46dB close threshold
+      let output: Float32Array = new Float32Array(GATE_TEST_FRAME_SIZE);
+      for (let i = 0; i < 50; i++) {
+        output = processGateFrame(worklet, 0.0001);
+      }
+
+      const maxAbs = output.reduce((max, s) => Math.max(max, Math.abs(s)), 0);
+      expect(maxAbs).toBeLessThan(1e-6);
+    });
+
+    it("reopens quickly when the level rises above the cutoff", () => {
+      const worklet = instantiateWorkletProcessor(getGeneratedWorkletCode());
+      sendWorkletMessage(worklet, {
+        type: "gate",
+        enabled: true,
+        thresholdDb: -40,
+      });
+
+      // Close the gate with sustained quiet input, then speak
+      for (let i = 0; i < 50; i++) {
+        processGateFrame(worklet, 0.0001);
+      }
+      let output: Float32Array = new Float32Array(GATE_TEST_FRAME_SIZE);
+      for (let i = 0; i < 5; i++) {
+        output = processGateFrame(worklet, 0.5);
+      }
+
+      expect(output[output.length - 1]).toBeGreaterThan(0.49);
+    });
+
+    it("holds the gate open briefly after the level drops", () => {
+      const worklet = instantiateWorkletProcessor(getGeneratedWorkletCode());
+      sendWorkletMessage(worklet, {
+        type: "gate",
+        enabled: true,
+        thresholdDb: -40,
+      });
+
+      // One loud frame arms the hold, then quiet frames within the hold
+      // window must still pass through unattenuated.
+      processGateFrame(worklet, 0.5);
+      let output: Float32Array = new Float32Array(GATE_TEST_FRAME_SIZE);
+      for (let i = 0; i < 10; i++) {
+        output = processGateFrame(worklet, 0.0001);
+      }
+
+      expect(output[output.length - 1]).toBeCloseTo(0.0001, 6);
+    });
+
+    it("becomes transparent again when the gate is disabled", () => {
+      const worklet = instantiateWorkletProcessor(getGeneratedWorkletCode());
+      sendWorkletMessage(worklet, {
+        type: "gate",
+        enabled: true,
+        thresholdDb: -40,
+      });
+
+      // Close the gate, then disable it; passthrough must resume immediately
+      for (let i = 0; i < 50; i++) {
+        processGateFrame(worklet, 0.0001);
+      }
+      sendWorkletMessage(worklet, {
+        type: "gate",
+        enabled: false,
+        thresholdDb: -40,
+      });
+      const output = processGateFrame(worklet, 0.0001);
+
+      expect(output[output.length - 1]).toBeCloseTo(0.0001, 6);
+    });
+
+    it("reports the measured input level while processing", () => {
+      const worklet = instantiateWorkletProcessor(getGeneratedWorkletCode());
+      sendWorkletMessage(worklet, {
+        type: "gate",
+        enabled: true,
+        thresholdDb: -40,
+      });
+
+      // Level reports aggregate 5 frames; process enough for one report
+      for (let i = 0; i < 5; i++) {
+        processGateFrame(worklet, 0.5);
+      }
+
+      const levelReports = worklet.port.postMessage.mock.calls
+        .map(([message]) => message as { type: string; rmsDb?: number })
+        .filter((message) => message.type === "level");
+      expect(levelReports.length).toBeGreaterThan(0);
+      // Constant 0.5 amplitude has an RMS of 0.5 ≈ -6.02dBFS
+      expect(levelReports[0].rmsDb).toBeCloseTo(-6.02, 1);
+    });
+  });
+
+  it("publishes worklet level reports and clears them on destroy", async () => {
+    const t = createTestContext();
+    vi.stubGlobal(
+      "AudioWorkletNode",
+      class {
+        constructor() {
+          return t.workletNode;
+        }
+      },
+    );
+    const processor = new RNNoiseProcessor();
+
+    await processor.init({
+      kind: Track.Kind.Audio,
+      track: t.track,
+      audioContext: t.audioContext,
+    });
+
+    const onmessage = (
+      t.workletNode.port as unknown as {
+        onmessage: (event: MessageEvent) => void;
+      }
+    ).onmessage;
+    expect(onmessage).toBeTypeOf("function");
+
+    onmessage({ data: { type: "level", rmsDb: -42 } } as MessageEvent);
+    expect(microphoneInputLevelDb$.value).toBe(-42);
+
+    await processor.destroy();
+    expect(microphoneInputLevelDb$.value).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ import { logger } from "matrix-js-sdk/lib/logger";
 import { BehaviorSubject } from "rxjs";
 
 import { PosthogAnalytics } from "../analytics/PosthogAnalytics";
+import { MIC_CUTOFF_DEFAULT_DB } from "../audio/microphoneGate";
 import type { RNNoiseSuppressionPreset } from "../audio/rnnoiseTypes";
 import { type Behavior } from "../state/Behavior";
 import { useBehavior } from "../useBehavior";
@@ -126,6 +127,15 @@ export const rnnoiseNoiseSuppressionPreset =
     "rnnoise-noise-suppression-preset",
     "conservative",
   );
+
+export const micCutoffEnabled = new Setting<boolean>(
+  "mic-cutoff-enabled",
+  false,
+);
+export const micCutoffThresholdDb = new Setting<number>(
+  "mic-cutoff-threshold-db",
+  MIC_CUTOFF_DEFAULT_DB,
+);
 
 export const showHandRaisedTimer = new Setting<boolean>(
   "hand-raised-show-timer",

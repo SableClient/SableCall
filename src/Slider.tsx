@@ -36,6 +36,12 @@ interface Props {
    * displayed as a percentage.
    */
   tooltipFormatter?: (value: number) => string;
+  /**
+   * Live input level to render as a meter inside the track, as a fraction
+   * (0-1) of the slider's range. The meter is highlighted while the level
+   * exceeds the slider's current value.
+   */
+  level?: number;
 }
 
 /**
@@ -52,6 +58,7 @@ export const Slider: FC<Props> = ({
   step,
   disabled,
   tooltipFormatter,
+  level,
 }) => {
   const onValueChange = useCallback(
     ([v]: number[]) => onValueChangeProp(v),
@@ -61,6 +68,8 @@ export const Slider: FC<Props> = ({
     ([v]: number[]) => onValueCommitProp?.(v),
     [onValueCommitProp],
   );
+  const levelAboveValue =
+    level !== undefined && max > min && level >= (value - min) / (max - min);
 
   return (
     <Root
@@ -75,6 +84,15 @@ export const Slider: FC<Props> = ({
     >
       <Track className={styles.track}>
         <Range className={styles.highlight} />
+        {level !== undefined && (
+          <div
+            data-testid="slider-level-meter"
+            className={classNames(styles.level, {
+              [styles.levelAbove]: levelAboveValue,
+            })}
+            style={{ inlineSize: `${Math.max(0, Math.min(1, level)) * 100}%` }}
+          />
+        )}
       </Track>
       {/* Note: This is expected not to be visible on mobile.*/}
       <Tooltip

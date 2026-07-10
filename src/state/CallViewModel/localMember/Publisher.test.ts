@@ -28,10 +28,13 @@ import { Publisher } from "./Publisher";
 import { type Connection } from "../remoteMembers/Connection";
 import { type MuteStates } from "../../MuteStates";
 import {
+  micCutoffEnabled,
+  micCutoffThresholdDb,
   rnnoiseNoiseSuppression,
   rnnoiseNoiseSuppressionPreset,
 } from "../../../settings/settings";
 import type { RNNoiseProcessor } from "../../../audio/RNNoiseProcessor";
+import { MIC_CUTOFF_DEFAULT_DB } from "../../../audio/microphoneGate";
 
 let scope: ObservableScope;
 
@@ -390,6 +393,8 @@ describe("Publisher", () => {
       vi.unstubAllGlobals();
       rnnoiseNoiseSuppression.setValue(false);
       rnnoiseNoiseSuppressionPreset.setValue("conservative");
+      micCutoffEnabled.setValue(false);
+      micCutoffThresholdDb.setValue(MIC_CUTOFF_DEFAULT_DB);
     });
 
     it("enabling setting applies RNNoise processor on microphone track", async () => {
@@ -614,6 +619,40 @@ describe("Publisher", () => {
       );
     });
 
+    it("keeps the processor and only disables the gate when cutoff is turned off while RNNoise is on", async () => {
+      const micTrack = createMockLocalTrack(
+        Track.Source.Microphone,
+      ) as LocalTrack & { getProcessor: () => unknown };
+      trackPublications.push({
+        source: Track.Source.Microphone,
+        track: micTrack,
+        audioTrack: micTrack,
+      } as unknown as LocalTrackPublication);
+      localParticipant.emit(
+        ParticipantEvent.LocalTrackPublished,
+        trackPublications[0],
+      );
+
+      rnnoiseNoiseSuppression.setValue(true);
+      micCutoffEnabled.setValue(true);
+      for (let i = 0; i < 5; i++) {
+        await flushPromises();
+      }
+
+      const processor = micTrack.getProcessor() as RNNoiseProcessor;
+      expect(processor).toBeDefined();
+      const setGateConfigSpy = vi.spyOn(processor, "setGateConfig");
+      vi.mocked(micTrack.stopProcessor).mockClear();
+
+      micCutoffEnabled.setValue(false);
+      await flushPromises();
+
+      expect(setGateConfigSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: false }),
+      );
+      expect(micTrack.stopProcessor).not.toHaveBeenCalled();
+    });
+
     it("updates active RNNoise processor preset when preset setting changes", async () => {
       const micTrack = createMockLocalTrack(
         Track.Source.Microphone,
@@ -638,6 +677,117 @@ describe("Publisher", () => {
       await flushPromises();
 
       expect(setPresetSpy).toHaveBeenCalledWith("strong");
+    });
+  });
+
+  describe("Microphone cutoff", () => {
+    beforeEach(() => {
+      vi.stubGlobal("AudioWorkletNode", class AudioWorkletNode {});
+      vi.stubGlobal(
+        "AudioWorklet",
+        class AudioWorklet {
+          public async addModule(): Promise<void> {
+            await Promise.resolve();
+          }
+        },
+      );
+      vi.stubGlobal(
+        "MediaStreamAudioDestinationNode",
+        class MediaStreamAudioDestinationNode {},
+      );
+      vi.stubGlobal(
+        "MediaStreamAudioSourceNode",
+        class MediaStreamAudioSourceNode {},
+      );
+      micCutoffEnabled.setValue(false);
+      micCutoffThresholdDb.setValue(MIC_CUTOFF_DEFAULT_DB);
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      micCutoffEnabled.setValue(false);
+      micCutoffThresholdDb.setValue(MIC_CUTOFF_DEFAULT_DB);
+    });
+
+    function publishMicTrack(): LocalTrack & {
+      setProcessor: (...args: unknown[]) => Promise<void>;
+      stopProcessor: () => void;
+      restartTrack: (...args: unknown[]) => void;
+      getProcessor: () => unknown;
+    } {
+      const micTrack = createMockLocalTrack(
+        Track.Source.Microphone,
+      ) as LocalTrack & {
+        setProcessor: (...args: unknown[]) => Promise<void>;
+        stopProcessor: () => void;
+        restartTrack: (...args: unknown[]) => void;
+        getProcessor: () => unknown;
+      };
+      trackPublications.push({
+        source: Track.Source.Microphone,
+        track: micTrack,
+        audioTrack: micTrack,
+      } as unknown as LocalTrackPublication);
+      localParticipant.emit(
+        ParticipantEvent.LocalTrackPublished,
+        trackPublications[0],
+      );
+      return micTrack;
+    }
+
+    it("enabling cutoff applies the processor even when RNNoise is disabled", async () => {
+      const micTrack = publishMicTrack();
+
+      micCutoffEnabled.setValue(true);
+      await flushPromises();
+
+      expect(micTrack.setProcessor).toHaveBeenCalledOnce();
+      // The gate doesn't change capture constraints, so no restart is needed
+      expect(micTrack.restartTrack).not.toHaveBeenCalled();
+    });
+
+    it("disabling cutoff removes the processor when RNNoise is off", async () => {
+      const micTrack = publishMicTrack();
+
+      micCutoffEnabled.setValue(true);
+      await flushPromises();
+      micCutoffEnabled.setValue(false);
+      await flushPromises();
+
+      expect(micTrack.setProcessor).toHaveBeenCalledOnce();
+      expect(micTrack.stopProcessor).toHaveBeenCalledOnce();
+    });
+
+    it("updates the gate config on the active processor when the threshold changes", async () => {
+      const micTrack = publishMicTrack();
+
+      micCutoffEnabled.setValue(true);
+      await flushPromises();
+
+      const processor = micTrack.getProcessor() as RNNoiseProcessor;
+      const setGateConfigSpy = vi.spyOn(processor, "setGateConfig");
+
+      micCutoffThresholdDb.setValue(-30);
+      await flushPromises();
+
+      expect(setGateConfigSpy).toHaveBeenCalledWith({
+        enabled: true,
+        thresholdDb: -30,
+      });
+    });
+
+    it("auto-disables the cutoff setting when processor setup fails", async () => {
+      const micTrack = publishMicTrack();
+      vi.mocked(micTrack.setProcessor).mockRejectedValueOnce(
+        new Error("gate setup failed"),
+      );
+
+      micCutoffEnabled.setValue(true);
+      for (let i = 0; i < 5; i++) {
+        await flushPromises();
+      }
+
+      expect(micCutoffEnabled.getValue()).toBe(false);
     });
   });
 });

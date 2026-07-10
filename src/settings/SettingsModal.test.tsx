@@ -14,10 +14,13 @@ import type { MatrixClient } from "matrix-js-sdk";
 import type { ReactNode } from "react";
 import { SettingsModal } from "./SettingsModal";
 import {
+  micCutoffEnabled,
+  micCutoffThresholdDb,
   rnnoiseNoiseSuppression,
   rnnoiseNoiseSuppressionPreset,
 } from "./settings";
 import { supportsRNNoiseProcessor } from "../audio/RNNoiseProcessor";
+import { MIC_CUTOFF_DEFAULT_DB } from "../audio/microphoneGate";
 
 const { mockRequestDeviceNames } = vi.hoisted(() => ({
   mockRequestDeviceNames: vi.fn(),
@@ -133,6 +136,8 @@ describe("SettingsModal RNNoise controls", () => {
     mockRequestDeviceNames.mockClear();
     rnnoiseNoiseSuppressionPreset.setValue("conservative");
     rnnoiseNoiseSuppression.setValue(false);
+    micCutoffEnabled.setValue(false);
+    micCutoffThresholdDb.setValue(MIC_CUTOFF_DEFAULT_DB);
     vi.mocked(supportsRNNoiseProcessor).mockReturnValue(true);
   });
 
@@ -185,5 +190,44 @@ describe("SettingsModal RNNoise controls", () => {
     expect(
       localStorage.getItem("matrix-setting-rnnoise-noise-suppression"),
     ).toBe("true");
+  });
+
+  it("shows the cutoff volume slider only when microphone cutoff is enabled", async () => {
+    const user = userEvent.setup();
+    renderSettingsModal();
+
+    const checkbox = screen.getByLabelText(
+      "Mute microphone input below a volume cutoff",
+    );
+    expect(checkbox).not.toBeChecked();
+    // Only the sound effect volume slider is present initially
+    expect(screen.getAllByRole("slider")).toHaveLength(1);
+    expect(screen.queryByText(/Cutoff volume/)).not.toBeInTheDocument();
+
+    await user.click(checkbox);
+
+    expect(micCutoffEnabled.getValue()).toBe(true);
+    expect(localStorage.getItem("matrix-setting-mic-cutoff-enabled")).toBe(
+      "true",
+    );
+    expect(screen.getByText(/Cutoff volume/)).toBeInTheDocument();
+    expect(screen.getAllByRole("slider")).toHaveLength(2);
+  });
+
+  it("disables microphone cutoff when AudioWorklet support is unavailable", () => {
+    vi.mocked(supportsRNNoiseProcessor).mockReturnValue(false);
+    micCutoffEnabled.setValue(true);
+
+    renderSettingsModal();
+
+    const checkbox = screen.getByLabelText(
+      "Mute microphone input below a volume cutoff",
+    );
+    expect(checkbox).toBeDisabled();
+    expect(checkbox).not.toBeChecked();
+    expect(
+      screen.getByText("(Microphone cutoff is not supported by this browser.)"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Cutoff volume/)).not.toBeInTheDocument();
   });
 });
