@@ -17,6 +17,14 @@ Please see LICENSE in the repository root for full details.
   margin-bottom: 0;
 }
 
+.cutoffFieldRow.cutoffFieldRow {
+  margin-bottom: 0;
+}
+
+.cutoffFieldRow + .volumeSlider {
+  margin-bottom: var(--cpd-space-8x);
+}
+
 .volumeSlider {
   margin-top: var(--cpd-space-2x);
 }

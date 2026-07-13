@@ -353,7 +353,9 @@ export const SettingsModal: FC<Props> = ({
     return (
       <>
         <h4>{t("settings.audio_tab.mic_cutoff_header")}</h4>
-        <FieldRow>
+        <FieldRow
+          className={effectiveCutoffEnabled ? styles.cutoffFieldRow : undefined}
+        >
           <InputField
             id="activateMicCutoff"
             label={t("settings.audio_tab.mic_cutoff_label")}
