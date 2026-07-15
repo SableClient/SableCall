@@ -40,6 +40,22 @@ Please see LICENSE in the repository root for full details.
   background: var(--cpd-color-bg-action-primary-disabled);
 }
 
+.level {
+  position: absolute;
+  block-size: 100%;
+  inline-size: 0;
+  border-radius: var(--cpd-radius-pill-effect);
+  background: var(--cpd-color-icon-quaternary);
+  transition:
+    inline-size 0.06s linear,
+    background-color 0.1s ease;
+  pointer-events: none;
+}
+
+.levelAbove {
+  background: var(--cpd-color-icon-success-primary);
+}
+
 .handle {
   display: block;
   block-size: var(--cpd-space-4x);

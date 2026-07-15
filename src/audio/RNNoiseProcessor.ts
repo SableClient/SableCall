@@ -6,6 +6,7 @@ Please see LICENSE in the repository root for full details.
 */
 
 import { logger } from "matrix-js-sdk/lib/logger";
+import { BehaviorSubject } from "rxjs";
 
 import type {
   AudioProcessorOptions,
@@ -13,6 +14,16 @@ import type {
   TrackProcessor,
 } from "livekit-client";
 import type { RNNoiseSuppressionPreset } from "./rnnoiseTypes";
+import type { Behavior } from "../state/Behavior";
+import {
+  GATE_CLOSE_MS,
+  GATE_HOLD_FRAMES,
+  GATE_HYSTERESIS_DB,
+  GATE_OPEN_MS,
+  LEVEL_REPORT_FRAMES,
+  MIC_CUTOFF_DEFAULT_DB,
+  type MicrophoneGateConfig,
+} from "./microphoneGate";
 import rnnoiseWorkletModuleUrl from "./RNNoiseWorkletModule.ts?worker&url";
 
 /**
@@ -26,6 +37,16 @@ const DEFAULT_RNNOISE_PRESET: RNNoiseSuppressionPreset = "conservative";
 // settled (resolved) once complete, absent on failure (cleared for retry).
 const workletRegistrations = new WeakMap<AudioContext, Promise<void>>();
 const warnedUnsupportedSampleRates = new Set<number>();
+
+const _microphoneInputLevelDb$ = new BehaviorSubject<number | null>(null);
+/**
+ * The current microphone input level in dBFS, measured by the active
+ * microphone audio worklet (peak frame RMS per ~50ms window), or null while
+ * no processor is running. Used by the settings UI to render a live level
+ * meter next to the microphone cutoff slider.
+ */
+export const microphoneInputLevelDb$: Behavior<number | null> =
+  _microphoneInputLevelDb$;
 
 type RNNoiseSupportGlobal = typeof globalThis & {
   AudioWorklet?: {
@@ -97,6 +118,12 @@ const FRAME_SIZE = ${RNNOISE_SAMPLE_LENGTH};
 const RING_SIZE = FRAME_SIZE * 3; // Enough headroom for buffering
 const SAMPLE_RATE = ${RNNOISE_REQUIRED_SAMPLE_RATE};
 const DEFAULT_PRESET = "${DEFAULT_RNNOISE_PRESET}";
+const GATE_HYSTERESIS_DB = ${GATE_HYSTERESIS_DB};
+const GATE_HOLD_FRAMES = ${GATE_HOLD_FRAMES};
+const GATE_OPEN_MS = ${GATE_OPEN_MS};
+const GATE_CLOSE_MS = ${GATE_CLOSE_MS};
+const MIC_CUTOFF_DEFAULT_DB = ${MIC_CUTOFF_DEFAULT_DB};
+const LEVEL_REPORT_FRAMES = ${LEVEL_REPORT_FRAMES};
 const PRESETS = {
   conservative: {
     maxAttenuationDb: 4,
@@ -133,6 +160,7 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     // Ring buffers
     this._inBuf = new Float32Array(RING_SIZE);
     this._outBuf = new Float32Array(RING_SIZE);
+    this._frameBuf = new Float32Array(FRAME_SIZE);
     this._inW = 0;  // input write position
     this._inR = 0;  // input read position
     this._outW = 0; // output write position
@@ -140,8 +168,19 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     this._currentGain = 1;
     this._targetGain = 1;
     this._holdFrames = 0;
+    this._denoiseEnabled = true;
+    this._gateEnabled = false;
+    this._gateOpenThresholdDb = MIC_CUTOFF_DEFAULT_DB;
+    this._gateCloseThresholdDb = MIC_CUTOFF_DEFAULT_DB - GATE_HYSTERESIS_DB;
+    this._gateHoldFrames = 0;
+    this._gateCurrentGain = 1;
+    this._gateTargetGain = 1;
+    this._levelReportCounter = 0;
+    this._levelReportMaxRms = 0;
 
     this._setPreset(DEFAULT_PRESET);
+    this._gateOpenStep = this._smoothingStepFromMs(GATE_OPEN_MS);
+    this._gateCloseStep = this._smoothingStepFromMs(GATE_CLOSE_MS);
 
     this._initRNNoise();
 
@@ -150,6 +189,10 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
         this._cleanup();
       } else if (event.data.type === 'preset') {
         this._setPreset(event.data.preset);
+      } else if (event.data.type === 'denoise') {
+        this._setDenoiseEnabled(event.data.enabled === true);
+      } else if (event.data.type === 'gate') {
+        this._setGateConfig(event.data.enabled, event.data.thresholdDb);
       }
     };
   }
@@ -170,6 +213,62 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     this._holdFramesConfig = config.holdFrames;
     this._attenuateStep = this._smoothingStepFromMs(config.attenuateMs);
     this._releaseStep = this._smoothingStepFromMs(config.releaseMs);
+  }
+
+  _setDenoiseEnabled(enabled) {
+    this._denoiseEnabled = enabled;
+    if (!enabled) {
+      // Release any RNNoise attenuation so the stage becomes transparent.
+      this._targetGain = 1;
+      this._holdFrames = 0;
+    }
+  }
+
+  _setGateConfig(enabled, thresholdDb) {
+    this._gateEnabled = enabled === true;
+    if (typeof thresholdDb === 'number' && Number.isFinite(thresholdDb)) {
+      this._gateOpenThresholdDb = thresholdDb;
+      this._gateCloseThresholdDb = thresholdDb - GATE_HYSTERESIS_DB;
+    }
+    if (!this._gateEnabled) {
+      this._gateTargetGain = 1;
+      this._gateCurrentGain = 1;
+      this._gateHoldFrames = 0;
+    }
+  }
+
+  _reportLevel(frameRms) {
+    if (frameRms > this._levelReportMaxRms) {
+      this._levelReportMaxRms = frameRms;
+    }
+    this._levelReportCounter += 1;
+    if (this._levelReportCounter < LEVEL_REPORT_FRAMES) return;
+
+    const rmsDb = this._levelReportMaxRms > 0
+      ? 20 * Math.log10(this._levelReportMaxRms)
+      : -200;
+    this.port.postMessage({ type: 'level', rmsDb });
+    this._levelReportCounter = 0;
+    this._levelReportMaxRms = 0;
+  }
+
+  _updateGateGain(frameRms) {
+    if (!this._gateEnabled) {
+      this._gateTargetGain = 1;
+      return;
+    }
+
+    const rmsDb = frameRms > 0 ? 20 * Math.log10(frameRms) : -200;
+    if (rmsDb >= this._gateOpenThresholdDb) {
+      this._gateHoldFrames = GATE_HOLD_FRAMES;
+      this._gateTargetGain = 1;
+    } else if (this._gateHoldFrames > 0) {
+      this._gateHoldFrames -= 1;
+    } else if (rmsDb < this._gateCloseThresholdDb) {
+      this._gateTargetGain = 0;
+    }
+    // Between the close and open thresholds the gate keeps its previous
+    // state (hysteresis).
   }
 
   _updateTargetGain(vadProbability) {
@@ -233,32 +332,58 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     this._destroyed = true;
   }
 
-  _processRNNoiseFrame() {
-    const heapIdx = this._pcmBuf >> 2; // byte offset → float32 index
+  _processFrame() {
+    const useDenoise = this._denoiseEnabled && this._ready;
+    let sumSquares = 0;
 
-    // Copy from input ring buffer to WASM heap, scaling to int16 range
-    for (let i = 0; i < FRAME_SIZE; i++) {
-      this._heapF32[heapIdx + i] =
-        this._inBuf[(this._inR + i) % RING_SIZE] * 32768.0;
+    if (useDenoise) {
+      const heapIdx = this._pcmBuf >> 2; // byte offset → float32 index
+
+      // Copy from input ring buffer to WASM heap, scaling to int16 range
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        this._heapF32[heapIdx + i] =
+          this._inBuf[(this._inR + i) % RING_SIZE] * 32768.0;
+      }
+
+      // Run RNNoise denoising (in-place)
+      const vadProbability = this._module._rnnoise_process_frame(
+        this._state, this._pcmBuf, this._pcmBuf
+      );
+      this._updateTargetGain(vadProbability);
+
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        const sample = this._heapF32[heapIdx + i] / 32768.0;
+        this._frameBuf[i] = sample;
+        sumSquares += sample * sample;
+      }
+    } else {
+      for (let i = 0; i < FRAME_SIZE; i++) {
+        const sample = this._inBuf[(this._inR + i) % RING_SIZE];
+        this._frameBuf[i] = sample;
+        sumSquares += sample * sample;
+      }
     }
     this._inR = (this._inR + FRAME_SIZE) % RING_SIZE;
 
-    // Run RNNoise denoising (in-place)
-    const vadProbability = this._module._rnnoise_process_frame(
-      this._state, this._pcmBuf, this._pcmBuf
-    );
-    this._updateTargetGain(vadProbability);
+    const frameRms = Math.sqrt(sumSquares / FRAME_SIZE);
+    this._updateGateGain(frameRms);
+    this._reportLevel(frameRms);
 
-    // Copy from WASM heap to output ring buffer, scaling back to float range.
-    // Apply additional conservative attenuation between speech segments.
+    // Copy to the output ring buffer, applying the smoothed RNNoise
+    // attenuation and the noise-gate gain.
     for (let i = 0; i < FRAME_SIZE; i++) {
       const smoothingStep = this._targetGain < this._currentGain
         ? this._attenuateStep
         : this._releaseStep;
       this._currentGain +=
         (this._targetGain - this._currentGain) * smoothingStep;
+      const gateStep = this._gateTargetGain < this._gateCurrentGain
+        ? this._gateCloseStep
+        : this._gateOpenStep;
+      this._gateCurrentGain +=
+        (this._gateTargetGain - this._gateCurrentGain) * gateStep;
       this._outBuf[(this._outW + i) % RING_SIZE] =
-        (this._heapF32[heapIdx + i] / 32768.0) * this._currentGain;
+        this._frameBuf[i] * this._currentGain * this._gateCurrentGain;
     }
     this._outW = (this._outW + FRAME_SIZE) % RING_SIZE;
   }
@@ -284,8 +409,11 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
     const blockSize = output.length;
     const channelCount = inputChannels.length;
 
-    if (!this._ready) {
-      // Pass through until RNNoise is ready, with deterministic mono downmix.
+    const framePathActive =
+      (this._denoiseEnabled && this._ready) || this._gateEnabled;
+    if (!framePathActive) {
+      // Pass through when no processing stage is active (e.g. RNNoise not
+      // ready yet), with deterministic mono downmix.
       for (let i = 0; i < blockSize; i++) {
         output[i] = this._mixInputChannels(inputChannels, i, channelCount);
       }
@@ -304,7 +432,7 @@ class RNNoiseWorkletProcessor extends AudioWorkletProcessor {
 
     // Process complete frames
     while (this._ringAvailable(this._inW, this._inR) >= FRAME_SIZE) {
-      this._processRNNoiseFrame();
+      this._processFrame();
     }
 
     // Read from output ring buffer
@@ -336,7 +464,8 @@ export function createRNNoiseWorkletCodeForTesting(
 
 /**
  * A LiveKit TrackProcessor that applies RNNoise-based noise suppression
- * to a local audio track via an AudioWorklet.
+ * and/or a level-based noise gate (microphone cutoff volume) to a local
+ * audio track via an AudioWorklet.
  *
  * The RNNoise WASM binary is lazy-loaded only when the processor is
  * initialized, keeping the main bundle small.
@@ -353,12 +482,21 @@ export class RNNoiseProcessor implements TrackProcessor<
   private destinationNode?: MediaStreamAudioDestinationNode;
   private destroyed = false;
   private preset: RNNoiseSuppressionPreset;
+  private denoiseEnabled: boolean;
+  private gate: MicrophoneGateConfig;
   private lastAudioContext?: AudioContext;
 
   public constructor(
     preset: RNNoiseSuppressionPreset = DEFAULT_RNNOISE_PRESET,
+    denoiseEnabled = true,
+    gate: MicrophoneGateConfig = {
+      enabled: false,
+      thresholdDb: MIC_CUTOFF_DEFAULT_DB,
+    },
   ) {
     this.preset = preset;
+    this.denoiseEnabled = denoiseEnabled;
+    this.gate = { ...gate };
   }
 
   private async ensureWorkletRegistered(
@@ -387,7 +525,11 @@ export class RNNoiseProcessor implements TrackProcessor<
     this.destroyed = false;
     const { audioContext, track } = opts;
 
-    if (audioContext.sampleRate !== RNNOISE_REQUIRED_SAMPLE_RATE) {
+    // RNNoise is trained for 48kHz audio; the gate works at any rate.
+    if (
+      this.denoiseEnabled &&
+      audioContext.sampleRate !== RNNOISE_REQUIRED_SAMPLE_RATE
+    ) {
       warnUnsupportedSampleRate(audioContext.sampleRate);
       throw createUnsupportedSampleRateError(audioContext.sampleRate);
     }
@@ -418,7 +560,28 @@ export class RNNoiseProcessor implements TrackProcessor<
     this.sourceNode = sourceNode;
     this.workletNode = workletNode;
     this.destinationNode = destinationNode;
+    this.workletNode.port.onmessage = (event: MessageEvent): void => {
+      const data = event.data as {
+        type?: string;
+        rmsDb?: number;
+        message?: string;
+      };
+      if (data.type === "level" && typeof data.rmsDb === "number") {
+        _microphoneInputLevelDb$.next(data.rmsDb);
+      } else if (data.type === "error") {
+        logger.warn("Microphone audio worklet error", data.message);
+      }
+    };
     this.workletNode.port.postMessage({ type: "preset", preset: this.preset });
+    this.workletNode.port.postMessage({
+      type: "denoise",
+      enabled: this.denoiseEnabled,
+    });
+    this.workletNode.port.postMessage({
+      type: "gate",
+      enabled: this.gate.enabled,
+      thresholdDb: this.gate.thresholdDb,
+    });
     this.processedTrack = destinationNode.stream.getAudioTracks()[0];
     this.lastAudioContext = audioContext;
   }
@@ -460,6 +623,7 @@ export class RNNoiseProcessor implements TrackProcessor<
     this.workletNode = undefined;
     this.destinationNode = undefined;
     this.processedTrack = undefined;
+    _microphoneInputLevelDb$.next(null);
     await Promise.resolve();
   }
 
@@ -468,6 +632,37 @@ export class RNNoiseProcessor implements TrackProcessor<
     this.workletNode?.port.postMessage({
       type: "preset",
       preset: this.preset,
+    });
+  }
+
+  /**
+   * Toggles the RNNoise denoising stage without tearing down the worklet.
+   * Throws when enabling denoising on an AudioContext whose sample rate
+   * RNNoise does not support.
+   */
+  public setDenoiseEnabled(enabled: boolean): void {
+    if (
+      enabled &&
+      !this.denoiseEnabled &&
+      this.lastAudioContext !== undefined &&
+      this.lastAudioContext.sampleRate !== RNNOISE_REQUIRED_SAMPLE_RATE
+    ) {
+      warnUnsupportedSampleRate(this.lastAudioContext.sampleRate);
+      throw createUnsupportedSampleRateError(this.lastAudioContext.sampleRate);
+    }
+    this.denoiseEnabled = enabled;
+    this.workletNode?.port.postMessage({ type: "denoise", enabled });
+  }
+
+  /**
+   * Updates the level-based noise gate (microphone cutoff volume).
+   */
+  public setGateConfig(gate: MicrophoneGateConfig): void {
+    this.gate = { ...gate };
+    this.workletNode?.port.postMessage({
+      type: "gate",
+      enabled: gate.enabled,
+      thresholdDb: gate.thresholdDb,
     });
   }
 }

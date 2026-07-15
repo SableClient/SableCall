@@ -206,6 +206,11 @@
     "audio_tab": {
       "effect_volume_description": "Adjust the volume at which reactions and hand raised effects play.",
       "effect_volume_label": "Sound effect volume",
+      "mic_cutoff_description": "Sound quieter than the cutoff volume will not be sent to other participants.",
+      "mic_cutoff_header": "Microphone cutoff",
+      "mic_cutoff_label": "Mute microphone input below a volume cutoff",
+      "mic_cutoff_not_supported": "(Microphone cutoff is not supported by this browser.)",
+      "mic_cutoff_threshold_label": "Cutoff volume",
       "rnnoise_header": "Noise suppression",
       "rnnoise_label": "Enable enhanced noise suppression (RNNoise)",
       "rnnoise_not_supported": "(Enhanced noise suppression is not supported by this browser.)",

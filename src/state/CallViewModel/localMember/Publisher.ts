@@ -44,11 +44,14 @@ import {
 import { shouldEnableNativeNoiseSuppression } from "../../../audio/noiseSuppressionPolicy.ts";
 import {
   echoCancellationSetting,
+  micCutoffEnabled,
+  micCutoffThresholdDb,
   noiseSuppressionSetting,
   rnnoiseNoiseSuppression,
   rnnoiseNoiseSuppressionPreset,
 } from "../../../settings/settings.ts";
 import type { RNNoiseSuppressionPreset } from "../../../audio/rnnoiseTypes.ts";
+import type { MicrophoneGateConfig } from "../../../audio/microphoneGate.ts";
 
 /**
  * A wrapper for a Connection object.
@@ -485,41 +488,63 @@ export class Publisher {
       microphoneTrack$,
       rnnoiseNoiseSuppression.value$,
       rnnoiseNoiseSuppressionPreset.value$,
+      micCutoffEnabled.value$,
+      micCutoffThresholdDb.value$,
     ])
       .pipe(
         scope.bind(),
+        // Changes to the RNNoise enabled setting are deliberately ignored
+        // here; they need a track restart and are handled by
+        // observeRNNoiseSettingRestart.
         distinctUntilChanged(
-          ([aTrack, _aEnabled, aPreset], [bTrack, _bEnabled, bPreset]) => {
-            return aTrack === bTrack && aPreset === bPreset;
+          (
+            [aTrack, _aEnabled, aPreset, aGateEnabled, aGateThresholdDb],
+            [bTrack, _bEnabled, bPreset, bGateEnabled, bGateThresholdDb],
+          ) => {
+            return (
+              aTrack === bTrack &&
+              aPreset === bPreset &&
+              aGateEnabled === bGateEnabled &&
+              aGateThresholdDb === bGateThresholdDb
+            );
           },
         ),
       )
-      .subscribe(([microphoneTrack, rnnoiseEnabled, rnnoisePreset]) => {
-        const rnnoiseSupported = supportsRNNoiseProcessor();
-        if (!microphoneTrack || !rnnoiseSupported) {
-          this.rnnoisePolicySyncedTrack = microphoneTrack;
-          return;
-        }
-
-        const isNewMicrophoneTrack =
-          microphoneTrack !== this.rnnoisePolicySyncedTrack;
-        this.rnnoisePolicySyncedTrack = microphoneTrack;
-
-        this.enqueueRNNoiseOperation(async () => {
-          if (rnnoiseEnabled && isNewMicrophoneTrack) {
-            await this.restartMicrophoneTrackForNoiseSuppressionPolicy(
-              microphoneTrack,
-              devices,
-              rnnoiseEnabled,
-            );
+      .subscribe(
+        ([
+          microphoneTrack,
+          rnnoiseEnabled,
+          rnnoisePreset,
+          gateEnabled,
+          gateThresholdDb,
+        ]) => {
+          const rnnoiseSupported = supportsRNNoiseProcessor();
+          if (!microphoneTrack || !rnnoiseSupported) {
+            this.rnnoisePolicySyncedTrack = microphoneTrack;
+            return;
           }
-          await this.syncRNNoiseProcessor(
-            microphoneTrack,
-            rnnoiseEnabled,
-            rnnoisePreset,
-          );
-        });
-      });
+
+          const isNewMicrophoneTrack =
+            microphoneTrack !== this.rnnoisePolicySyncedTrack;
+          this.rnnoisePolicySyncedTrack = microphoneTrack;
+
+          this.enqueueRNNoiseOperation(async () => {
+            if (rnnoiseEnabled && isNewMicrophoneTrack) {
+              await this.restartMicrophoneTrackForNoiseSuppressionPolicy(
+                microphoneTrack,
+                devices,
+                rnnoiseEnabled,
+              );
+            }
+            await this.syncRNNoiseProcessor(
+              microphoneTrack,
+              rnnoiseEnabled,
+              rnnoisePreset,
+              { enabled: gateEnabled, thresholdDb: gateThresholdDb },
+            );
+          });
+        },
+      );
   }
 
   private observeRNNoiseSettingRestart(
@@ -546,6 +571,10 @@ export class Publisher {
             audioTrack,
             rnnoiseEnabled && rnnoiseSupported,
             rnnoiseNoiseSuppressionPreset.getValue(),
+            {
+              enabled: micCutoffEnabled.getValue(),
+              thresholdDb: micCutoffThresholdDb.getValue(),
+            },
           );
         });
       });
@@ -586,33 +615,43 @@ export class Publisher {
     microphoneTrack: LocalAudioTrack,
     rnnoiseEnabled: boolean,
     rnnoisePreset: RNNoiseSuppressionPreset,
+    gate: MicrophoneGateConfig,
   ): Promise<void> {
     try {
       const processor = microphoneTrack.getProcessor();
-      const rnnoiseActive = processor?.name === "rnnoise-noise-suppression";
+      const processorActive = processor?.name === "rnnoise-noise-suppression";
       const rnnoiseProcessor =
         processor instanceof RNNoiseProcessor ? processor : undefined;
 
-      if (rnnoiseEnabled) {
+      if (rnnoiseEnabled || gate.enabled) {
         if (rnnoiseProcessor) {
           rnnoiseProcessor.setPreset(rnnoisePreset);
+          rnnoiseProcessor.setDenoiseEnabled(rnnoiseEnabled);
+          rnnoiseProcessor.setGateConfig(gate);
           return;
         }
 
-        if (rnnoiseActive) {
+        if (processorActive) {
           await microphoneTrack.stopProcessor();
         }
-        await microphoneTrack.setProcessor(new RNNoiseProcessor(rnnoisePreset));
-      } else if (rnnoiseActive) {
+        await microphoneTrack.setProcessor(
+          new RNNoiseProcessor(rnnoisePreset, rnnoiseEnabled, gate),
+        );
+      } else if (processorActive) {
         await microphoneTrack.stopProcessor();
       }
     } catch (e) {
-      this.logger.error("Failed to apply RNNoise microphone processor", e);
+      this.logger.error("Failed to apply microphone audio processor", e);
       if (rnnoiseEnabled && rnnoiseNoiseSuppression.getValue()) {
         this.logger.warn(
           "Disabling RNNoise setting after processor setup failure",
         );
         rnnoiseNoiseSuppression.setValue(false);
+      } else if (gate.enabled && micCutoffEnabled.getValue()) {
+        this.logger.warn(
+          "Disabling microphone cutoff setting after processor setup failure",
+        );
+        micCutoffEnabled.setValue(false);
       }
     }
   }
