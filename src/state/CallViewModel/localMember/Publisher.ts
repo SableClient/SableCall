@@ -43,6 +43,7 @@ import {
 } from "../../../audio/RNNoiseProcessor.ts";
 import { shouldEnableNativeNoiseSuppression } from "../../../audio/noiseSuppressionPolicy.ts";
 import {
+  autoGainControlSetting,
   echoCancellationSetting,
   micCutoffEnabled,
   micCutoffThresholdDb,
@@ -602,6 +603,7 @@ export class Publisher {
 
     await audioTrack.restartTrack({
       deviceId: devices.audioInput.selected$.value?.id,
+      autoGainControl: autoGainControlSetting.getValue(),
       echoCancellation: echoCancellationSetting.getValue(),
       noiseSuppression: shouldEnableNativeNoiseSuppression({
         urlNoiseSuppression: noiseSuppressionSetting.getValue(),
