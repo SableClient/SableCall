@@ -423,6 +423,7 @@ export function mockRemoteScreenShare(
   return createRemoteScreenShare(testScope(), {
     id: "screenshare",
     userId: member.userId,
+    rtcBackendIdentity: `${member.userId}:${rtcMember.deviceId}`,
     participant$: constant(participant),
     encryptionSystem: { kind: E2eeType.PER_PARTICIPANT },
     livekitRoom$: constant(livekitRoom),

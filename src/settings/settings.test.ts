@@ -10,7 +10,9 @@ import { describe, expect, it, beforeEach } from "vitest";
 import {
   Setting,
   parseResolution,
+  saveTileVolume,
   seedSettingsFromConfig,
+  tileVolumes,
   screenShareCodec,
   screenShareResolution,
   screenShareFramerate,
@@ -107,5 +109,39 @@ describe("seedSettingsFromConfig", () => {
     });
     expect(screenShareBitrate.getValue()).toBe(3_000_000);
     expect(screenShareFramerate.getValue()).toBe(defaultFramerate);
+  });
+});
+
+describe("saveTileVolume", () => {
+  beforeEach(() => {
+    tileVolumes.setValue({});
+  });
+
+  it("stores non-default volumes", () => {
+    saveTileVolume("@alice:example.org:DEVICE", 0.5);
+    expect(tileVolumes.getValue()).toEqual({
+      "@alice:example.org:DEVICE": 0.5,
+    });
+  });
+
+  it("removes the entry when set back to the default volume", () => {
+    saveTileVolume("@alice:example.org:DEVICE", 0.5);
+    saveTileVolume("@alice:example.org:DEVICE", 1);
+    expect(tileVolumes.getValue()).toEqual({});
+  });
+
+  it("does not write when the volume is already at the default", () => {
+    const before = tileVolumes.getValue();
+    saveTileVolume("@alice:example.org:DEVICE", 1);
+    expect(tileVolumes.getValue()).toBe(before);
+  });
+
+  it("keeps entries for other keys intact", () => {
+    saveTileVolume("@alice:example.org:DEVICE", 0.5);
+    saveTileVolume("@alice:example.org:DEVICE:screen-share", 1.2);
+    saveTileVolume("@alice:example.org:DEVICE", 1);
+    expect(tileVolumes.getValue()).toEqual({
+      "@alice:example.org:DEVICE:screen-share": 1.2,
+    });
   });
 });
