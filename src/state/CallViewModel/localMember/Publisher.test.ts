@@ -28,6 +28,7 @@ import { Publisher } from "./Publisher";
 import { type Connection } from "../remoteMembers/Connection";
 import { type MuteStates } from "../../MuteStates";
 import {
+  autoGainControlSetting,
   micCutoffEnabled,
   micCutoffThresholdDb,
   rnnoiseNoiseSuppression,
@@ -395,6 +396,7 @@ describe("Publisher", () => {
       rnnoiseNoiseSuppressionPreset.setValue("conservative");
       micCutoffEnabled.setValue(false);
       micCutoffThresholdDb.setValue(MIC_CUTOFF_DEFAULT_DB);
+      autoGainControlSetting.setValue(true);
     });
 
     it("enabling setting applies RNNoise processor on microphone track", async () => {
@@ -502,6 +504,31 @@ describe("Publisher", () => {
       expect(micTrack.restartTrack).toHaveBeenCalledWith(
         expect.objectContaining({
           noiseSuppression: false,
+        }),
+      );
+    });
+
+    it("preserves the auto gain control setting when restarting the microphone track", async () => {
+      autoGainControlSetting.setValue(false);
+      const micTrack = createMockLocalTrack(
+        Track.Source.Microphone,
+      ) as LocalTrack & { restartTrack: (...args: unknown[]) => void };
+      trackPublications.push({
+        source: Track.Source.Microphone,
+        track: micTrack,
+        audioTrack: micTrack,
+      } as unknown as LocalTrackPublication);
+      localParticipant.emit(
+        ParticipantEvent.LocalTrackPublished,
+        trackPublications[0],
+      );
+
+      rnnoiseNoiseSuppression.setValue(true);
+      await flushPromises();
+
+      expect(micTrack.restartTrack).toHaveBeenCalledWith(
+        expect.objectContaining({
+          autoGainControl: false,
         }),
       );
     });
