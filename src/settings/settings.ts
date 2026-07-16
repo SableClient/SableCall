@@ -306,3 +306,28 @@ export function seedSettingsFromConfig(
     }
   }
 }
+
+/**
+ * Saved per-tile playback volumes, keyed by the participant's RTC backend
+ * identity (userId:deviceId), with a ":screen-share" suffix for screen share
+ * audio. Only non-default volumes are stored.
+ */
+export const tileVolumes = new Setting<Record<string, number>>(
+  "tile-volumes",
+  {},
+);
+
+/**
+ * Persist a tile's committed playback volume, dropping the entry when it is
+ * back at the default (1) so the map only holds actual adjustments.
+ */
+export function saveTileVolume(key: string, volume: number): void {
+  const volumes = { ...tileVolumes.getValue() };
+  if (volume === 1) {
+    if (!(key in volumes)) return;
+    delete volumes[key];
+  } else {
+    volumes[key] = volume;
+  }
+  tileVolumes.setValue(volumes);
+}

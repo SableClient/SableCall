@@ -11,6 +11,7 @@ import { combineLatest, map, of, switchMap } from "rxjs";
 
 import { type Behavior } from "../Behavior";
 import { createVolumeControls, type VolumeControls } from "../VolumeControls";
+import { saveTileVolume, tileVolumes } from "../../settings/settings";
 import {
   type BaseUserMediaInputs,
   type BaseUserMediaViewModel,
@@ -52,6 +53,10 @@ export function createRemoteUserMedia(
       sink$: scope.behavior(
         inputs.participant$.pipe(map((p) => (volume) => p?.setVolume(volume))),
       ),
+      // Restore and persist this participant device's saved volume
+      initialVolume: tileVolumes.getValue()[inputs.rtcBackendIdentity],
+      onVolumeCommitted: (volume) =>
+        saveTileVolume(inputs.rtcBackendIdentity, volume),
     }),
     local: false,
     speaking$: scope.behavior(

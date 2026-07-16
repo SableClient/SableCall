@@ -18,6 +18,7 @@ import {
 import { type ObservableScope } from "../ObservableScope";
 import { createVolumeControls, type VolumeControls } from "../VolumeControls";
 import { observeTrackReference$ } from "../observeTrackReference";
+import { saveTileVolume, tileVolumes } from "../../settings/settings";
 
 export interface RemoteScreenShareViewModel
   extends BaseScreenShareViewModel, VolumeControls {
@@ -35,12 +36,16 @@ export interface RemoteScreenShareViewModel
 export interface RemoteScreenShareInputs extends BaseScreenShareInputs {
   participant$: Behavior<RemoteParticipant | null>;
   pretendToBeDisconnected$: Behavior<boolean>;
+  rtcBackendIdentity: string;
 }
 
 export function createRemoteScreenShare(
   scope: ObservableScope,
   { pretendToBeDisconnected$, ...inputs }: RemoteScreenShareInputs,
 ): RemoteScreenShareViewModel {
+  // Screen share audio gets its own saved volume, separate from the
+  // participant's voice volume.
+  const savedVolumeKey = `${inputs.rtcBackendIdentity}:screen-share`;
   return {
     ...createBaseScreenShare(scope, inputs),
     ...createVolumeControls(scope, {
@@ -53,6 +58,8 @@ export function createRemoteScreenShare(
           ),
         ),
       ),
+      initialVolume: tileVolumes.getValue()[savedVolumeKey],
+      onVolumeCommitted: (volume) => saveTileVolume(savedVolumeKey, volume),
     }),
     local: false,
     videoEnabled$: scope.behavior(
