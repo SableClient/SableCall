@@ -40,7 +40,7 @@ import {
   timer,
   takeUntil,
 } from "rxjs";
-import { logger as rootLogger } from "matrix-js-sdk/lib/logger";
+import { type Logger, logger as rootLogger } from "matrix-js-sdk/lib/logger";
 import {
   MembershipManagerEvent,
   type LivekitTransportConfig,
@@ -162,7 +162,6 @@ import {
 } from "../media/RingingMediaViewModel.ts";
 import { type GridTileViewModel } from "../TileViewModel.ts";
 
-const logger = rootLogger.getChild("[CallViewModel]");
 //TODO
 // Larger rename
 // member,membership -> rtcMember
@@ -214,6 +213,7 @@ export type WindowMode = "normal" | "narrow" | "flat" | "pip";
 
 interface LayoutScanState {
   layout: Layout | null;
+  overflowing: boolean;
   tiles: TileStore;
 }
 
@@ -366,6 +366,10 @@ export interface CallViewModel {
    * and header as overlays.
    */
   edgeToEdge$: Behavior<boolean>;
+  /**
+   * Whether the call layout is overflowing the interface (causing it to scroll).
+   */
+  overflowing$: Behavior<boolean>;
 
   settingsOpen$: Behavior<boolean>;
   setSettingsOpen$: Behavior<(open: boolean) => void>;
@@ -417,6 +421,7 @@ export function createCallViewModel$(
   reactionsSubject$: Observable<Record<string, ReactionInfo>>,
   trackProcessorState$: Behavior<ProcessorState>,
 ): CallViewModel {
+  const logger = rootLogger.getChild("[CallViewModel]");
   const client = matrixRoom.client;
   const userId = client.getUserId();
   const deviceId = client.getDeviceId();
@@ -426,6 +431,7 @@ export function createCallViewModel$(
   const livekitKeyProvider = getE2eeKeyProvider(
     options.encryptionSystem,
     matrixRTCSession,
+    logger,
   );
   // matrix_rtc_mode in config.json overrides the user's Developer Settings choice.
   // It is validated at config load (src/config/Config.ts) so the cast is safe.
@@ -1477,7 +1483,7 @@ export function createCallViewModel$(
 
   // There is a cyclical dependency here: the layout algorithms want to know
   // which tiles are on screen, but to know which tiles are on screen we have to
-  // first render a layout. To deal with this we assume initially that no tiles
+  // first render a layout. To deal with this we assume initially that all tiles
   // are visible, and loop the data back into the layouts with a Subject.
   const visibleTiles$ = new Subject<number>();
   const setVisibleTiles = (value: number): void => visibleTiles$.next(value);
@@ -1485,7 +1491,7 @@ export function createCallViewModel$(
   const layoutInternals$ = scope.behavior<LayoutScanState & { layout: Layout }>(
     combineLatest([
       layoutMedia$,
-      visibleTiles$.pipe(startWith(0), distinctUntilChanged()),
+      visibleTiles$.pipe(startWith(Infinity), distinctUntilChanged()),
     ]).pipe(
       scan<
         [LayoutMedia, number],
@@ -1496,6 +1502,7 @@ export function createCallViewModel$(
           let layout: Layout;
           let newTiles: TileStore;
           let pip: GridTileViewModel | undefined;
+          let overflowing = false;
           switch (media.type) {
             case "grid":
             case "spotlight-landscape":
@@ -1507,6 +1514,7 @@ export function createCallViewModel$(
                 setVisibleTiles,
                 prevTiles,
               );
+              overflowing = newTiles.gridTiles.length > visibleTiles;
               break;
             case "spotlight-expanded":
               [layout, newTiles] = spotlightExpandedLayout(
@@ -1541,9 +1549,9 @@ export function createCallViewModel$(
             tile.setShowOutline(tile === pip);
           }
 
-          return { layout, tiles: newTiles };
+          return { layout, overflowing, tiles: newTiles };
         },
-        { layout: null, tiles: TileStore.empty() },
+        { layout: null, overflowing: false, tiles: TileStore.empty() },
       ),
     ),
   );
@@ -1553,6 +1561,10 @@ export function createCallViewModel$(
    */
   const layout$ = scope.behavior<Layout>(
     layoutInternals$.pipe(map(({ layout }) => layout)),
+  );
+
+  const overflowing$ = scope.behavior<boolean>(
+    layoutInternals$.pipe(map(({ overflowing }) => overflowing)),
   );
 
   /**
@@ -1796,6 +1808,7 @@ export function createCallViewModel$(
     settingsOpen$: settingsOpen$,
     setSettingsOpen$: setSettingsOpen$,
     edgeToEdge$,
+    overflowing$,
     earpieceMode$: earpieceMode$,
     audioOutputSwitcher$: audioOutputSwitcher$,
     reconnecting$: localMembership.reconnecting$,
@@ -1807,6 +1820,7 @@ export function createCallViewModel$(
 function getE2eeKeyProvider(
   e2eeSystem: EncryptionSystem,
   rtcSession: MatrixRTCSession,
+  logger: Logger,
 ): BaseKeyProvider | undefined {
   if (e2eeSystem.kind === E2eeType.NONE) return undefined;
 

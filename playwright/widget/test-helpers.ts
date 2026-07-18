@@ -190,11 +190,27 @@ export class TestHelpers {
     }
   }
 
+  public static async closeReleaseAnnouncement(
+    page: Page,
+    name: string,
+  ): Promise<void> {
+    try {
+      await page
+        .getByRole("dialog", { name })
+        .getByRole("button", { name: "OK" })
+        .click({ timeout: 2000 });
+    } catch {
+      // Announcement not shown; nothing to do
+    }
+  }
+
   public static async createRoom(
     name: string,
     page: Page,
     andInvite: string[] = [],
   ): Promise<void> {
+    await TestHelpers.closeReleaseAnnouncement(page, "Introducing Sections");
+
     await page
       .getByRole("navigation", { name: "Room list" })
       .getByRole("button", { name: "New conversation" })
@@ -369,25 +385,9 @@ export class TestHelpers {
     frame: FrameLocator,
     count: number,
   ): Promise<void> {
-    // XXX we need to be better at our HTML markup and accessibility, it would make
-    // this kind of stuff way easier to test if we could look out for aria attributes.
-    await expect
-      .poll(
-        async () => {
-          return await frame
-            .locator("video")
-            .evaluateAll(
-              (videos: Element[]) =>
-                videos.filter(
-                  (v: Element) =>
-                    window.getComputedStyle(v).display === "block",
-                ).length,
-            );
-        },
-        {
-          timeout: 10000,
-        },
-      )
-      .toBe(count);
+    await expect(frame.locator("video").filter({ visible: true })).toHaveCount(
+      count,
+      { timeout: 10000 },
+    );
   }
 }
