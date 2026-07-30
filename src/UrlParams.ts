@@ -85,6 +85,12 @@ export interface UrlProperties {
    */
   baseUrl: string | null;
   /**
+   * The LiveKit JWT/SFU service URL to use (only used in matryoshka mode).
+   * Enables the hosting client to provide the call's transport directly instead
+   * of relying on local discovery.
+   */
+  livekitServiceUrl: string | null;
+  /**
    * The BCP 47 code of the language the app should use.
    */
   lang: string | null;
@@ -457,6 +463,7 @@ export const computeUrlParams = (search = "", hash = ""): UrlParams => {
     displayName: parser.getParam("displayName"),
     deviceId: isWidget ? parser.getParam("deviceId") : null,
     baseUrl: isWidget ? parser.getParam("baseUrl") : null,
+    livekitServiceUrl: isWidget ? parser.getParam("livekitServiceUrl") : null,
     lang: parser.getParam("lang"),
     fonts: parser.getAllParams("font"),
     fontScale: Number.isNaN(fontScale) ? null : fontScale,

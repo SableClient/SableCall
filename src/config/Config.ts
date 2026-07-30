@@ -50,11 +50,12 @@ export class Config {
 
       Config.internalInstance.initPromise = downloadConfig(fetchTarget).then(
         (config) => {
-          internalInstance.config = merge(
-            {},
-            DEFAULT_CONFIG,
-            validateConfig(config),
-          );
+          const merged = merge({}, DEFAULT_CONFIG, validateConfig(config));
+          const livekitServiceUrl = getUrlParams().livekitServiceUrl;
+          if (livekitServiceUrl) {
+            merged.livekit = { livekit_service_url: livekitServiceUrl };
+          }
+          internalInstance.config = merged;
         },
       );
     }

@@ -8,7 +8,7 @@ Please see LICENSE in the repository root for full details.
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { logger } from "matrix-js-sdk/lib/logger";
 
-import { validateConfig } from "./Config";
+import { Config, validateConfig } from "./Config";
 import { MatrixRTCMode } from "./ConfigOptions";
 
 describe("validateConfig", () => {
@@ -50,5 +50,83 @@ describe("validateConfig", () => {
     });
     expect(result.matrix_rtc_mode).toBeUndefined();
     expect(result.ssla).toBe("https://example.invalid/ssla");
+  });
+});
+
+describe("Config.init livekitServiceUrl url param", () => {
+  const resetConfig = (): void => {
+    (Config as unknown as { internalInstance?: unknown }).internalInstance =
+      undefined;
+  };
+  const widgetSearch =
+    "?widgetId=call-embed&parentUrl=https%3A%2F%2Fexample.org";
+
+  afterEach(() => {
+    window.history.replaceState(null, "", "?");
+    resetConfig();
+    vi.unstubAllGlobals();
+  });
+
+  it("uses the livekitServiceUrl url param when the config file has none", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `${widgetSearch}&livekitServiceUrl=${encodeURIComponent(
+        "https://lk.example.org",
+      )}`,
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("{}", { status: 200 })),
+    );
+
+    await Config.init();
+
+    expect(Config.get().livekit).toStrictEqual({
+      livekit_service_url: "https://lk.example.org",
+    });
+  });
+
+  it("prefers the livekitServiceUrl url param over the config file", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `${widgetSearch}&livekitServiceUrl=${encodeURIComponent(
+        "https://lk.example.org",
+      )}`,
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            livekit: { livekit_service_url: "https://config.example.org" },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    await Config.init();
+
+    expect(Config.get().livekit).toStrictEqual({
+      livekit_service_url: "https://lk.example.org",
+    });
+  });
+
+  it("ignores the livekitServiceUrl url param outside widget mode", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `?livekitServiceUrl=${encodeURIComponent("https://lk.example.org")}`,
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("{}", { status: 200 })),
+    );
+
+    await Config.init();
+
+    expect(Config.get().livekit).toBeUndefined();
   });
 });
