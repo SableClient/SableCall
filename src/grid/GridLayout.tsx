@@ -13,6 +13,7 @@ import {
 } from "react";
 import { distinctUntilChanged } from "rxjs";
 import { useObservableEagerState } from "observable-hooks";
+import classNames from "classnames";
 
 import { type GridLayout as GridLayoutModel } from "../state/layout-types.ts";
 import styles from "./GridLayout.module.css";
@@ -96,7 +97,9 @@ export const makeGridLayout: CallLayout<GridLayoutModel> = ({
     return (
       <div
         ref={ref}
-        className={styles.scrolling}
+        className={classNames(styles.scrolling, {
+          [styles.focused]: model.focused,
+        })}
         style={
           {
             width,
@@ -110,7 +113,9 @@ export const makeGridLayout: CallLayout<GridLayoutModel> = ({
         {model.grid.map((m) => (
           <Slot
             key={m.id}
-            className={styles.slot}
+            className={classNames(styles.slot, {
+              [styles.focused]: model.focused,
+            })}
             id={m.id}
             model={m}
             data-stream={m.media$.value.type === "screen share" || undefined}

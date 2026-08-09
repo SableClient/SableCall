@@ -123,6 +123,7 @@ export interface GridLayoutSummary {
   type: "grid";
   spotlight?: string[];
   grid: string[];
+  focused?: boolean;
 }
 
 export interface SpotlightLandscapeLayoutSummary {
@@ -184,6 +185,7 @@ function summarizeLayout$(l$: Observable<Layout>): Observable<LayoutSummary> {
               type: l.type,
               spotlight: spotlight?.map((vm) => vm.id),
               grid: grid.map((vm) => vm.id),
+              ...(l.focused ? { focused: true as const } : {}),
             }),
           );
         case "spotlight-landscape":
@@ -375,6 +377,68 @@ describe.each([
               type: "spotlight-landscape",
               spotlight: [`${aliceId}:0:screen-share`],
               grid: [`${localId}:0`, `${aliceId}:0`, `${bobId}:0`],
+            },
+          });
+        },
+      );
+    });
+  });
+
+  test("focused stream fills the grid and hides other tiles", () => {
+    withTestScheduler(({ schedule, expectObservable }) => {
+      withCallViewModel(
+        {
+          remoteParticipants$: constant([aliceParticipant, bobParticipant]),
+          rtcMembers$: constant([
+            localRtcMember,
+            aliceRtcMember,
+            bobRtcMember,
+          ]),
+          sharingScreen: new Map([
+            [aliceParticipant, constant(true)],
+            [bobParticipant, constant(true)],
+          ]),
+        },
+        (vm) => {
+          // Focus Alice's screen share using the live view model from the
+          // current layout, then unfocus it again.
+          const focusAlice = (): void => {
+            const layout = vm.layout$.value;
+            if (layout.type !== "grid") return;
+            const share = layout.grid
+              .map((tile) => tile.media$.value)
+              .find(
+                (m) =>
+                  m.type === "screen share" &&
+                  m.id === `${aliceId}:0:screen-share`,
+              );
+            if (share !== undefined && share.type === "screen share")
+              vm.setFocusedStream(share);
+          };
+          schedule("  f u", {
+            f: focusAlice,
+            u: (): void => vm.setFocusedStream(null),
+          });
+
+          expectObservable(summarizeLayout$(vm.layout$)).toBe("ba", {
+            a: {
+              type: "grid",
+              spotlight: undefined,
+              grid: [
+                // After unfocusing, the TileStore keeps the previously focused
+                // stream tile in its spot (index 0) and appends the rest.
+                `${aliceId}:0:screen-share`,
+                `${localId}:0`,
+                `${aliceId}:0`,
+                `${bobId}:0`,
+                `${bobId}:0:screen-share`,
+              ],
+            },
+            b: {
+              type: "grid",
+              focused: true,
+              spotlight: undefined,
+              grid: [`${aliceId}:0:screen-share`],
             },
           });
         },

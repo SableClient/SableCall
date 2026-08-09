@@ -94,6 +94,16 @@ borders don't support gradients */
   width: 100%;
 }
 
+.maximise {
+  display: flex;
+  align-items: center;
+}
+
+.maximise > svg {
+  display: block;
+  color: var(--cpd-color-icon-primary);
+}
+
 .tile .switchCamera {
   opacity: 1;
   background: var(--cpd-color-bg-action-secondary-rest);

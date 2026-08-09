@@ -357,6 +357,8 @@ export interface CallViewModel {
   toggleSpotlightExpanded$: Behavior<(() => void) | null>;
   gridMode$: Behavior<GridMode>;
   setGridMode: (value: GridMode) => void;
+  focusedStream$: Behavior<ScreenShareViewModel | null>;
+  setFocusedStream: (vm: ScreenShareViewModel | null) => void;
 
   // header/footer visibility
   showHeader$: Behavior<boolean>;
@@ -1060,9 +1062,37 @@ export function createCallViewModel$(
 
   const { setGridMode, gridMode$ } = createLayoutModeSwitch(scope, windowMode$);
 
+  // A single screen share can be focused (maximised) to fill the grid 
+  const focusedStreamRequest$ = new Subject<ScreenShareViewModel | null>();
+  const focusedStream$ = scope.behavior<ScreenShareViewModel | null>(
+    focusedStreamRequest$.pipe(
+      startWith(null),
+      switchMap((requested) =>
+        requested === null
+          ? of(null)
+          : screenShares$.pipe(
+              map(
+                (shares) =>
+                  shares.find((s) => s.id === requested.id) ?? null,
+              ),
+              distinctUntilChanged(),
+            ),
+      ),
+    ),
+  );
+  const setFocusedStream = (requested: ScreenShareViewModel | null): void =>
+    focusedStreamRequest$.next(requested);
+
   const gridLayoutMedia$: Observable<GridLayoutMedia> = combineLatest(
-    [grid$, spotlight$],
-    (grid, spotlight) => {
+    [grid$, spotlight$, focusedStream$],
+    (grid, spotlight, focusedStream) => {
+      if (focusedStream !== null)
+        return {
+          type: "grid",
+          edgeToEdge: false,
+          focused: true,
+          grid: [focusedStream],
+        };
       // Screen shares are rendered as larger tiles inside the
       // grid layout, so multiple screen shares can be seen at once.
       // May be not elegant to get them from spotlight.
@@ -1072,6 +1102,7 @@ export function createCallViewModel$(
       return {
         type: "grid",
         edgeToEdge: false,
+        focused: false,
         grid: [...grid, ...screenShares],
       };
     },
@@ -1774,6 +1805,8 @@ export function createCallViewModel$(
     toggleSpotlightExpanded$: toggleSpotlightExpanded$,
     gridMode$: gridMode$,
     setGridMode: setGridMode,
+    focusedStream$,
+    setFocusedStream,
     layout$: layout$,
     localMatrixLivekitMember$,
     remoteMatrixLivekitMembers$: scope.behavior(

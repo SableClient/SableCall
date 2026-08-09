@@ -44,6 +44,7 @@ export function gridLikeLayout(
       type: media.type,
       spotlight: tiles.spotlightTile,
       grid: tiles.gridTiles,
+      focused: media.type === "grid" ? media.focused ?? false : undefined,
       spotlightAlignment$,
       setVisibleTiles,
     } as Layout & { type: GridLikeLayoutType },

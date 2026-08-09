@@ -36,6 +36,10 @@ import {
   Menu,
   Text,
 } from "@vector-im/compound-web";
+import {
+  ExpandIcon,
+  CollapseIcon,
+} from "@vector-im/compound-design-tokens/assets/web/icons";
 import { useObservableEagerState } from "observable-hooks";
 
 import styles from "./GridTile.module.css";
@@ -52,6 +56,7 @@ import { type UserMediaViewModel } from "../state/media/UserMediaViewModel";
 import { type ScreenShareViewModel } from "../state/media/ScreenShareViewModel";
 import { type RemoteScreenShareViewModel } from "../state/media/RemoteScreenShareViewModel";
 import { type RingingMediaViewModel } from "../state/media/RingingMediaViewModel";
+import { constant, type Behavior } from "../state/Behavior";
 import { RingingStatus } from "./RingingStatus";
 
 interface TileProps {
@@ -407,6 +412,16 @@ RemoteUserMediaTile.displayName = "RemoteUserMediaTile";
 
 interface ScreenShareTileProps extends TileProps {
   vm: ScreenShareViewModel;
+  /**
+   * The currently focused (maximised) stream, used to decide whether this tile
+   * shows a "maximise" or "restore" button.
+   */
+  focusedStream$?: Behavior<ScreenShareViewModel | null>;
+  /**
+   * Focuses (maximises) the given stream so it fills the grid and hides every
+   * other tile, or unfocuses when passed null.
+   */
+  onToggleFocusedStream?: (vm: ScreenShareViewModel | null) => void;
 }
 
 /**
@@ -483,6 +498,8 @@ const ScreenShareTileContent: FC<ScreenShareTileContentProps> = ({
   vm,
   videoEnabled,
   menu,
+  focusedStream$,
+  onToggleFocusedStream,
   className,
   focusable,
   targetWidth,
@@ -496,6 +513,10 @@ const ScreenShareTileContent: FC<ScreenShareTileContentProps> = ({
   const unencryptedWarning = useBehavior(vm.unencryptedWarning$);
   const focusUrl = useBehavior(vm.focusUrl$);
   const [menuOpen, setMenuOpen] = useState(false);
+  const focusedStream = useBehavior(focusedStream$ ?? constant(null));
+  const isFocused = focusedStream?.id === vm.id;
+
+  const FocusIcon = isFocused ? CollapseIcon : ExpandIcon;
 
   const tile = (
     <MediaView
@@ -512,32 +533,53 @@ const ScreenShareTileContent: FC<ScreenShareTileContentProps> = ({
       mxcAvatarUrl={mxcAvatarUrl}
       focusable={focusable}
       primaryButton={
-        menu === undefined ? undefined : (
-          <Menu
-            open={menuOpen}
-            onOpenChange={setMenuOpen}
-            title={displayName}
-            trigger={
+        onToggleFocusedStream === undefined && menu === undefined ? (
+          undefined
+        ) : (
+          <>
+            {onToggleFocusedStream !== undefined && (
               <button
-                aria-label={t("common.options")}
+                className={styles.maximise}
+                aria-label={
+                  isFocused ? t("video_tile.collapse") : t("video_tile.expand")
+                }
+                data-enabled="true"
+                onClick={(): void =>
+                  onToggleFocusedStream(isFocused ? null : vm)
+                }
                 tabIndex={focusable ? undefined : -1}
               >
-                <DotsThreeOutline
-                  aria-hidden
-                  width={18}
-                  height={18}
-                  style={{
-                    transform: "scale(0.75)",
-                    transformOrigin: "center",
-                  }}
-                />
+                <FocusIcon aria-hidden width={20} height={20} />
               </button>
-            }
-            side="left"
-            align="start"
-          >
-            {menu}
-          </Menu>
+            )}
+            {menu !== undefined && (
+              <Menu
+                open={menuOpen}
+                onOpenChange={setMenuOpen}
+                title={displayName}
+                trigger={
+                  <button
+                    aria-label={t("common.options")}
+                    tabIndex={focusable ? undefined : -1}
+                  >
+                    <DotsThreeOutline
+                      aria-hidden
+                      width={18}
+                      height={18}
+                      style={{
+                        transform: "scale(0.75)",
+                        transformOrigin: "center",
+                      }}
+                    />
+                  </button>
+                }
+                side="left"
+                align="start"
+              >
+                {menu}
+              </Menu>
+            )}
+          </>
         )
       }
       focusUrl={focusUrl}
@@ -571,6 +613,8 @@ interface GridTileProps {
   showRingingStatus: boolean;
   showOutline: boolean;
   focusable: boolean;
+  focusedStream$?: Behavior<ScreenShareViewModel | null>;
+  onToggleFocusedStream?: (vm: ScreenShareViewModel | null) => void;
 }
 
 export const GridTile: FC<GridTileProps> = ({
@@ -580,6 +624,8 @@ export const GridTile: FC<GridTileProps> = ({
   showRingingStatus,
   showOutline,
   onOpenProfile,
+  focusedStream$,
+  onToggleFocusedStream,
   className,
   ...props
 }) => {
@@ -606,6 +652,8 @@ export const GridTile: FC<GridTileProps> = ({
       <ScreenShareTile
         ref={ref}
         vm={media}
+        focusedStream$={focusedStream$}
+        onToggleFocusedStream={onToggleFocusedStream}
         displayName={displayName}
         mxcAvatarUrl={mxcAvatarUrl}
         className={classNames(className, { [styles.outline]: showOutline })}
