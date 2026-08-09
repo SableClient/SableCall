@@ -252,6 +252,8 @@
     "muted_for_me": "Für mich stumm geschaltet",
     "screen_share_volume": "Lautstärke der Bildschirmfreigabe",
     "volume": "Lautstärke",
-    "waiting_for_media": "Warten auf Medien..."
+    "waiting_for_media": "Warten auf Medien...",
+    "stop_watching": "Nicht mehr zuschauen",
+    "watch_stream": "Stream zuschauen"
   }
 }

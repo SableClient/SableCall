@@ -104,6 +104,39 @@ borders don't support gradients */
   color: var(--cpd-color-icon-primary);
 }
 
+/* The "Watch stream" button shown on a stopped screen share. */
+.watchStream {
+  appearance: none;
+  border: none;
+  border-radius: var(--cpd-radius-pill-effect);
+  padding: var(--cpd-space-3x) var(--cpd-space-5x);
+  background: var(--cpd-color-bg-action-primary-rest);
+  color: var(--cpd-color-text-on-primary);
+  box-shadow: var(--small-drop-shadow);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--cpd-space-2x);
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--cpd-font-size-body-lg);
+}
+
+.watchStream > svg {
+  display: block;
+  color: var(--cpd-color-text-on-primary);
+}
+
+@media (hover) {
+  .watchStream:hover {
+    background: var(--cpd-color-bg-action-primary-hovered);
+  }
+}
+
+.watchStream:active {
+  background: var(--cpd-color-bg-action-primary-pressed);
+}
+
 .tile .switchCamera {
   opacity: 1;
   background: var(--cpd-color-bg-action-secondary-rest);

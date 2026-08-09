@@ -27,7 +27,9 @@ import {
   MicrophoneSlash,
   DotsThreeOutline,
   Eye,
+  EyeSlash,
   Monitor,
+  Play,
 } from "@phosphor-icons/react";
 import {
   ContextMenu,
@@ -443,6 +445,7 @@ const RemoteScreenShareTileContent: FC<
   const videoEnabled = useBehavior(vm.videoEnabled$);
   const playbackMuted = useBehavior(vm.playbackMuted$);
   const playbackVolume = useBehavior(vm.playbackVolume$);
+  const watching = useBehavior(vm.watching$);
 
   const onSelectMute = useCallback(
     (e: Event) => {
@@ -450,6 +453,14 @@ const RemoteScreenShareTileContent: FC<
       vm.togglePlaybackMuted();
     },
     [vm],
+  );
+
+  const onSelectWatching = useCallback(
+    (e: Event) => {
+      e.preventDefault();
+      vm.setWatching(!watching);
+    },
+    [vm, watching],
   );
 
   const VolumeIcon = playbackMuted ? SpeakerSlash : SpeakerHigh;
@@ -461,6 +472,16 @@ const RemoteScreenShareTileContent: FC<
       {...props}
       menu={
         <>
+          <ToggleMenuItem
+            Icon={watching ? EyeSlash : Play}
+            label={
+              watching
+                ? t("video_tile.stop_watching")
+                : t("video_tile.watch_stream")
+            }
+            checked={!watching}
+            onSelect={onSelectWatching}
+          />
           <ToggleMenuItem
             Icon={MicrophoneSlash}
             label={t("video_tile.mute_for_me")}
@@ -512,16 +533,60 @@ const ScreenShareTileContent: FC<ScreenShareTileContentProps> = ({
   const video = useBehavior(vm.video$);
   const unencryptedWarning = useBehavior(vm.unencryptedWarning$);
   const focusUrl = useBehavior(vm.focusUrl$);
+  const watching = useBehavior(vm.watching$);
   const [menuOpen, setMenuOpen] = useState(false);
   const focusedStream = useBehavior(focusedStream$ ?? constant(null));
   const isFocused = focusedStream?.id === vm.id;
+
+  // A ref to the tile root so we can freeze the video element when the user
+  // stops watching the stream.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const mergedRef = useMergedRefs(contentRef, ref);
+
+  // Freeze the video (pause it) while not watching, and resume when watching.
+  // While stopped we also watch for new video elements (e.g. LiveKit
+  // re-attaching) and pause those too.
+  useEffect(() => {
+    const root = contentRef.current;
+    if (root === null) return;
+    const apply = (): void => {
+      root.querySelectorAll("video").forEach((v) => {
+        if (watching) void v.play().catch(() => {});
+        else v.pause();
+      });
+    };
+    apply();
+    if (watching) return;
+    const observer = new MutationObserver(apply);
+    observer.observe(root, { childList: true, subtree: true });
+    return (): void => observer.disconnect();
+  }, [watching]);
 
   const FocusIcon = isFocused ? CollapseIcon : ExpandIcon;
 
   const tile = (
     <MediaView
-      ref={ref}
+      ref={mergedRef}
       video={video}
+      streamOverlay={
+        watching ? undefined : (
+          <button
+            className={styles.watchStream}
+            aria-label={t("video_tile.watch_stream")}
+            onClick={(): void => {
+              vm.setWatching(true);
+              // Resume playback within the click gesture.
+              contentRef.current
+                ?.querySelectorAll("video")
+                .forEach((v) => void v.play().catch(() => {}));
+            }}
+            tabIndex={focusable ? undefined : -1}
+          >
+            <Play aria-hidden width={20} height={20} />
+            {t("video_tile.watch_stream")}
+          </button>
+        )
+      }
       userId={vm.userId}
       unencryptedWarning={unencryptedWarning}
       videoEnabled={videoEnabled}
