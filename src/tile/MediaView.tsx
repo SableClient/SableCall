@@ -214,7 +214,7 @@ export const MediaView: FC<Props> = ({
         {primaryButton}
       </div>
       {streamOverlay !== undefined && (
-        <div className={styles.overlay}>{streamOverlay}</div>
+        <div className={styles.streamOverlay}>{streamOverlay}</div>
       )}
     </animated.div>
   );
