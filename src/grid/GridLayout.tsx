@@ -94,6 +94,15 @@ export const makeGridLayout: CallLayout<GridLayoutModel> = ({
       );
     }, [width, minHeight, model.grid]);
 
+    // Render camera tiles before screen shares
+    const orderedTiles = useMemo(
+      () => [
+        ...model.grid.filter((m) => m.media$.value.type !== "screen share"),
+        ...model.grid.filter((m) => m.media$.value.type === "screen share"),
+      ],
+      [model.grid],
+    );
+
     return (
       <div
         ref={ref}
@@ -110,7 +119,7 @@ export const makeGridLayout: CallLayout<GridLayoutModel> = ({
           } as GridCSSProperties
         }
       >
-        {model.grid.map((m) => (
+        {orderedTiles.map((m) => (
           <Slot
             key={m.id}
             className={classNames(styles.slot, {
