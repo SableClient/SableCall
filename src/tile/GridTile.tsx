@@ -27,6 +27,7 @@ import {
   MicrophoneSlash,
   DotsThreeOutline,
   Eye,
+  Monitor,
 } from "@phosphor-icons/react";
 import {
   ContextMenu,
@@ -48,6 +49,8 @@ import { useBehavior } from "../useBehavior";
 import { type LocalUserMediaViewModel } from "../state/media/LocalUserMediaViewModel";
 import { type RemoteUserMediaViewModel } from "../state/media/RemoteUserMediaViewModel";
 import { type UserMediaViewModel } from "../state/media/UserMediaViewModel";
+import { type ScreenShareViewModel } from "../state/media/ScreenShareViewModel";
+import { type RemoteScreenShareViewModel } from "../state/media/RemoteScreenShareViewModel";
 import { type RingingMediaViewModel } from "../state/media/RingingMediaViewModel";
 import { RingingStatus } from "./RingingStatus";
 
@@ -402,6 +405,159 @@ const RemoteUserMediaTile: FC<RemoteUserMediaTileProps> = ({
 
 RemoteUserMediaTile.displayName = "RemoteUserMediaTile";
 
+interface ScreenShareTileProps extends TileProps {
+  vm: ScreenShareViewModel;
+}
+
+/**
+ * New Tile for screen sharing participants.
+ */
+const ScreenShareTile: FC<ScreenShareTileProps> = (props) => {
+  const { vm, ...rest } = props;
+  return vm.local ? (
+    <ScreenShareTileContent vm={vm} {...rest} videoEnabled={true} />
+  ) : (
+    <RemoteScreenShareTileContent vm={vm} {...rest} />
+  );
+};
+
+const RemoteScreenShareTileContent: FC<
+  Omit<ScreenShareTileProps, "vm"> & { vm: RemoteScreenShareViewModel }
+> = ({ vm, ...props }) => {
+  const { t } = useTranslation();
+  const videoEnabled = useBehavior(vm.videoEnabled$);
+  const playbackMuted = useBehavior(vm.playbackMuted$);
+  const playbackVolume = useBehavior(vm.playbackVolume$);
+
+  const onSelectMute = useCallback(
+    (e: Event) => {
+      e.preventDefault();
+      vm.togglePlaybackMuted();
+    },
+    [vm],
+  );
+
+  const VolumeIcon = playbackMuted ? SpeakerSlash : SpeakerHigh;
+
+  return (
+    <ScreenShareTileContent
+      vm={vm}
+      videoEnabled={videoEnabled}
+      {...props}
+      menu={
+        <>
+          <ToggleMenuItem
+            Icon={MicrophoneSlash}
+            label={t("video_tile.mute_for_me")}
+            checked={playbackMuted}
+            onSelect={onSelectMute}
+          />
+          {/* TODO: Figure out how to make this slider keyboard accessible */}
+          <MenuItem as="div" Icon={VolumeIcon} label={null} onSelect={null}>
+            <Slider
+              className={styles.volumeSlider}
+              label={t("video_tile.screen_share_volume")}
+              value={playbackVolume}
+              onValueChange={vm.adjustPlaybackVolume}
+              onValueCommit={vm.commitPlaybackVolume}
+              min={0}
+              max={1}
+              step={0.01}
+            />
+          </MenuItem>
+        </>
+      }
+    />
+  );
+};
+
+RemoteScreenShareTileContent.displayName = "RemoteScreenShareTileContent";
+
+interface ScreenShareTileContentProps extends ScreenShareTileProps {
+  videoEnabled: boolean;
+  menu?: ReactNode;
+}
+
+const ScreenShareTileContent: FC<ScreenShareTileContentProps> = ({
+  ref,
+  vm,
+  videoEnabled,
+  menu,
+  className,
+  focusable,
+  targetWidth,
+  targetHeight,
+  displayName,
+  mxcAvatarUrl,
+  ...props
+}) => {
+  const { t } = useTranslation();
+  const video = useBehavior(vm.video$);
+  const unencryptedWarning = useBehavior(vm.unencryptedWarning$);
+  const focusUrl = useBehavior(vm.focusUrl$);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const tile = (
+    <MediaView
+      ref={ref}
+      video={video}
+      userId={vm.userId}
+      unencryptedWarning={unencryptedWarning}
+      videoEnabled={videoEnabled}
+      videoFit="contain"
+      mirror={false}
+      className={classNames(className, styles.tile)}
+      nameTagLeadingIcon={<Monitor width={20} height={20} aria-hidden />}
+      displayName={displayName}
+      mxcAvatarUrl={mxcAvatarUrl}
+      focusable={focusable}
+      primaryButton={
+        menu === undefined ? undefined : (
+          <Menu
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            title={displayName}
+            trigger={
+              <button
+                aria-label={t("common.options")}
+                tabIndex={focusable ? undefined : -1}
+              >
+                <DotsThreeOutline
+                  aria-hidden
+                  width={18}
+                  height={18}
+                  style={{
+                    transform: "scale(0.75)",
+                    transformOrigin: "center",
+                  }}
+                />
+              </button>
+            }
+            side="left"
+            align="start"
+          >
+            {menu}
+          </Menu>
+        )
+      }
+      focusUrl={focusUrl}
+      targetWidth={targetWidth}
+      targetHeight={targetHeight}
+      {...props}
+    />
+  );
+
+  return menu === undefined ? (
+    tile
+  ) : (
+    <ContextMenu title={displayName} trigger={tile} hasAccessibleAlternative>
+      {menu}
+    </ContextMenu>
+  );
+};
+
+ScreenShareTileContent.displayName = "ScreenShareTileContent";
+
 interface GridTileProps {
   ref?: Ref<HTMLDivElement>;
   vm: GridTileViewModel;
@@ -441,6 +597,17 @@ export const GridTile: FC<GridTileProps> = ({
         displayName={displayName}
         mxcAvatarUrl={mxcAvatarUrl}
         showStatus={showRingingStatus}
+        className={classNames(className, { [styles.outline]: showOutline })}
+        {...props}
+      />
+    );
+  } else if (media.type === "screen share") {
+    return (
+      <ScreenShareTile
+        ref={ref}
+        vm={media}
+        displayName={displayName}
+        mxcAvatarUrl={mxcAvatarUrl}
         className={classNames(className, { [styles.outline]: showOutline })}
         {...props}
       />

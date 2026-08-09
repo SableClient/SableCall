@@ -1016,14 +1016,6 @@ export function createCallViewModel$(
     ),
   );
 
-  const hasRemoteScreenShares$ = scope.behavior<boolean>(
-    spotlight$.pipe(
-      map((spotlight) =>
-        spotlight.some((vm) => vm.type === "screen share" && !vm.local),
-      ),
-    ),
-  );
-
   const pipEnabled$ = scope.behavior(setPipEnabled$, false);
 
   const windowSize$ =
@@ -1066,22 +1058,23 @@ export function createCallViewModel$(
     spotlightExpandedToggle$,
   );
 
-  const { setGridMode, gridMode$ } = createLayoutModeSwitch(
-    scope,
-    windowMode$,
-    hasRemoteScreenShares$,
-  );
+  const { setGridMode, gridMode$ } = createLayoutModeSwitch(scope, windowMode$);
 
   const gridLayoutMedia$: Observable<GridLayoutMedia> = combineLatest(
     [grid$, spotlight$],
-    (grid, spotlight) => ({
-      type: "grid",
-      edgeToEdge: false,
-      spotlight: spotlight.some((vm) => vm.type === "screen share")
-        ? spotlight
-        : undefined,
-      grid,
-    }),
+    (grid, spotlight) => {
+      // Screen shares are rendered as larger tiles inside the
+      // grid layout, so multiple screen shares can be seen at once.
+      // May be not elegant to get them from spotlight.
+      const screenShares = spotlight.filter(
+        (vm): vm is ScreenShareViewModel => vm.type === "screen share",
+      );
+      return {
+        type: "grid",
+        edgeToEdge: false,
+        grid: [...grid, ...screenShares],
+      };
+    },
   );
 
   const spotlightLandscapeLayoutMedia$ = (

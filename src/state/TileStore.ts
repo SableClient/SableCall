@@ -13,7 +13,6 @@ import { fillGaps } from "../utils/iter";
 import { debugTileLayout } from "../settings/settings";
 import { type MediaViewModel } from "./media/MediaViewModel";
 import { type UserMediaViewModel } from "./media/UserMediaViewModel";
-import { type RingingMediaViewModel } from "./media/RingingMediaViewModel";
 
 type SpotlightBackground = "solid" | "transparent";
 
@@ -68,19 +67,17 @@ class SpotlightTileData {
 }
 
 class GridTileData {
-  private readonly media$: BehaviorSubject<
-    UserMediaViewModel | RingingMediaViewModel
-  >;
-  public get media(): UserMediaViewModel | RingingMediaViewModel {
+  private readonly media$: BehaviorSubject<MediaViewModel>;
+  public get media(): MediaViewModel {
     return this.media$.value;
   }
-  public set media(value: UserMediaViewModel) {
+  public set media(value: MediaViewModel) {
     this.media$.next(value);
   }
 
   public readonly vm: GridTileViewModel;
 
-  public constructor(media: UserMediaViewModel | RingingMediaViewModel) {
+  public constructor(media: MediaViewModel) {
     this.media$ = new BehaviorSubject(media);
     this.vm = new GridTileViewModel(this.media$);
   }
@@ -205,9 +202,7 @@ export class TileStoreBuilder {
    * Sets up a grid tile for the given media. If this is never called for some
    * media, then that media will have no grid tile.
    */
-  public registerGridTile(
-    media: UserMediaViewModel | RingingMediaViewModel,
-  ): void {
+  public registerGridTile(media: MediaViewModel): void {
     if (DEBUG_ENABLED)
       logger.debug(
         `[TileStore, ${this.generation}] register grid tile: ${media.displayName$.value}`,

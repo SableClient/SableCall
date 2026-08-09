@@ -11,8 +11,10 @@ Please see LICENSE in the repository root for full details.
 }
 
 .scrolling {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(var(--columns), var(--width));
+  grid-auto-rows: var(--height);
+  grid-auto-flow: dense;
   justify-content: center;
   align-content: center;
   gap: var(--gap);
@@ -21,6 +23,12 @@ Please see LICENSE in the repository root for full details.
 .scrolling > .slot {
   width: var(--width);
   height: var(--height);
+}
+
+/* Larger tiles for Screen shares in Grids */
+.scrolling > .slot[data-stream="true"] {
+  grid-column: span 2;
+  grid-row: span 2;
 }
 
 .fixed {

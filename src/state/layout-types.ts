@@ -20,8 +20,7 @@ import { type Behavior } from "./Behavior.ts";
 export interface GridLayoutMedia {
   type: "grid";
   edgeToEdge: false;
-  spotlight?: MediaViewModel[];
-  grid: UserMediaViewModel[];
+  grid: MediaViewModel[];
 }
 
 export interface SpotlightLandscapeLayoutMedia {

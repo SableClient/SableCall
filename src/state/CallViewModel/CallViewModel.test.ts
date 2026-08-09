@@ -302,82 +302,81 @@ describe.each([
     });
   });
 
-  test("remote screen sharing activates spotlight layout", () => {
-    withTestScheduler(({ behavior, schedule, expectObservable }) => {
-      // Start with no screen shares, then have Alice and Bob share their screens,
-      // then return to no screen shares, then have just Alice share for a bit
-      const aliceSharingInputMarbles = "   ny-n--yn";
-      const bobSharingInputMarbles = "     n-y-n---";
-      // While there are no screen shares, switch to spotlight manually, and then
-      // switch back to grid at the end
-      const modeInputMarbles = "           -----s--g";
-      // We should automatically enter spotlight for the first round of screen
-      // sharing, then return to grid, then manually go into spotlight, and
-      // remain in spotlight until we manually go back to grid
-      const expectedLayoutMarbles = "      abcdaefeg";
-      const expectedShowSpeakingMarbles = "y----nyny";
+  test("remote screen sharing shows streams in grid", () => {
+    withTestScheduler(({ expectObservable }) => {
+      // Both Alice and Bob share their screens at the same time.
       withCallViewModel(
         {
           remoteParticipants$: constant([aliceParticipant, bobParticipant]),
-          rtcMembers$: constant([localRtcMember, aliceRtcMember, bobRtcMember]),
+          rtcMembers$: constant([
+            localRtcMember,
+            aliceRtcMember,
+            bobRtcMember,
+          ]),
           sharingScreen: new Map([
-            [aliceParticipant, behavior(aliceSharingInputMarbles, yesNo)],
-            [bobParticipant, behavior(bobSharingInputMarbles, yesNo)],
+            [aliceParticipant, constant(true)],
+            [bobParticipant, constant(true)],
           ]),
         },
         (vm) => {
-          schedule(modeInputMarbles, {
+          expectObservable(summarizeLayout$(vm.layout$)).toBe("a", {
+            a: {
+              type: "grid",
+              spotlight: undefined,
+              grid: [
+                `${localId}:0`,
+                `${aliceId}:0`,
+                `${bobId}:0`,
+                `${aliceId}:0:screen-share`,
+                `${bobId}:0:screen-share`,
+              ],
+            },
+          });
+          expectObservable(vm.showSpeakingIndicators$).toBe("y", yesNo);
+        },
+      );
+    });
+  });
+
+  test("manually switching to spotlight still spotlights screen shares", () => {
+    withTestScheduler(({ schedule, expectObservable }) => {
+      // Alice shares her screen; the user manually switches to spotlight and
+      // back to grid.
+      withCallViewModel(
+        {
+          remoteParticipants$: constant([aliceParticipant, bobParticipant]),
+          rtcMembers$: constant([
+            localRtcMember,
+            aliceRtcMember,
+            bobRtcMember,
+          ]),
+          sharingScreen: new Map([
+            [aliceParticipant, constant(true)],
+          ]),
+        },
+        (vm) => {
+          schedule("  s g", {
             s: () => vm.setGridMode("spotlight"),
             g: () => vm.setGridMode("grid"),
           });
 
-          expectObservable(summarizeLayout$(vm.layout$)).toBe(
-            expectedLayoutMarbles,
-            {
-              a: {
-                type: "grid",
-                spotlight: undefined,
-                grid: [`${localId}:0`, `${aliceId}:0`, `${bobId}:0`],
-              },
-              b: {
-                type: "spotlight-landscape",
-                spotlight: [`${aliceId}:0:screen-share`],
-                grid: [`${localId}:0`, `${aliceId}:0`, `${bobId}:0`],
-              },
-              c: {
-                type: "spotlight-landscape",
-                spotlight: [
-                  `${aliceId}:0:screen-share`,
-                  `${bobId}:0:screen-share`,
-                ],
-                grid: [`${localId}:0`, `${aliceId}:0`, `${bobId}:0`],
-              },
-              d: {
-                type: "spotlight-landscape",
-                spotlight: [`${bobId}:0:screen-share`],
-                grid: [`${localId}:0`, `${aliceId}:0`, `${bobId}:0`],
-              },
-              e: {
-                type: "spotlight-landscape",
-                spotlight: [`${aliceId}:0`],
-                grid: [`${localId}:0`, `${bobId}:0`],
-              },
-              f: {
-                type: "spotlight-landscape",
-                spotlight: [`${aliceId}:0:screen-share`],
-                grid: [`${localId}:0`, `${bobId}:0`, `${aliceId}:0`],
-              },
-              g: {
-                type: "grid",
-                spotlight: undefined,
-                grid: [`${localId}:0`, `${bobId}:0`, `${aliceId}:0`],
-              },
+          expectObservable(summarizeLayout$(vm.layout$)).toBe("ba", {
+            a: {
+              type: "grid",
+              spotlight: undefined,
+              grid: [
+                `${localId}:0`,
+                `${aliceId}:0`,
+                `${bobId}:0`,
+                `${aliceId}:0:screen-share`,
+              ],
             },
-          );
-          expectObservable(vm.showSpeakingIndicators$).toBe(
-            expectedShowSpeakingMarbles,
-            yesNo,
-          );
+            b: {
+              type: "spotlight-landscape",
+              spotlight: [`${aliceId}:0:screen-share`],
+              grid: [`${localId}:0`, `${aliceId}:0`, `${bobId}:0`],
+            },
+          });
         },
       );
     });
@@ -387,12 +386,16 @@ describe.each([
     withTestScheduler(({ behavior, expectObservable }) => {
       // Local participant shares their screen, then stops sharing
       const sharingInputMarbles = "  nyn";
-      // Layout should show the screen share but stay in type: "grid"
+      // Layout should show the screen share as a grid tile but stay in grid
       const expectedLayoutMarbles = "aba";
       withCallViewModel(
         {
           remoteParticipants$: constant([aliceParticipant, bobParticipant]),
-          rtcMembers$: constant([localRtcMember, aliceRtcMember, bobRtcMember]),
+          rtcMembers$: constant([
+            localRtcMember,
+            aliceRtcMember,
+            bobRtcMember,
+          ]),
           sharingScreen: new Map([
             [localParticipant, behavior(sharingInputMarbles, yesNo)],
           ]),
@@ -408,8 +411,13 @@ describe.each([
               },
               b: {
                 type: "grid",
-                spotlight: [`${localId}:0:screen-share`],
-                grid: [`${localId}:0`, `${aliceId}:0`, `${bobId}:0`],
+                spotlight: undefined,
+                grid: [
+                  `${localId}:0`,
+                  `${aliceId}:0`,
+                  `${bobId}:0`,
+                  `${localId}:0:screen-share`,
+                ],
               },
             },
           );
@@ -443,8 +451,12 @@ describe.each([
               },
               b: {
                 type: "grid",
-                spotlight: [`${localId}:0:screen-share`],
-                grid: [`${localId}:0`, `${aliceId}:0`],
+                spotlight: undefined,
+                grid: [
+                  `${localId}:0`,
+                  `${aliceId}:0`,
+                  `${localId}:0:screen-share`,
+                ],
               },
             },
           );
