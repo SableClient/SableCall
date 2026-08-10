@@ -22,13 +22,7 @@ Please see LICENSE in the repository root for full details.
   z-index: 1;
   display: grid;
   place-items: center;
-  background: rgb(0 0 0 / 0.35);
-  backdrop-filter: blur(10px);
   pointer-events: none;
-}
-
-.streamOverlay > * {
-  pointer-events: auto;
 }
 
 .media video {

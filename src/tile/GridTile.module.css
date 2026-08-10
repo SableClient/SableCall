@@ -104,7 +104,36 @@ borders don't support gradients */
   color: var(--cpd-color-icon-primary);
 }
 
-/* The "Watch stream" button shown on a stopped screen share. */
+.streamOverlayInner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.streamOverlayInner > * {
+  pointer-events: auto;
+}
+
+.streamOverlayScrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.frozenFrame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--cpd-color-bg-canvas-default);
+  filter: blur(8px);
+  transform: scale(1.05);
+}
+
 .watchStream {
   appearance: none;
   border: none;
@@ -120,6 +149,7 @@ borders don't support gradients */
   font: inherit;
   font-weight: 600;
   font-size: var(--cpd-font-size-body-lg);
+  z-index: 1;
 }
 
 .watchStream > svg {

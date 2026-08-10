@@ -542,6 +542,25 @@ const ScreenShareTileContent: FC<ScreenShareTileContentProps> = ({
   // stops watching the stream.
   const contentRef = useRef<HTMLDivElement | null>(null);
   const mergedRef = useMergedRefs(contentRef, ref);
+  
+  const [frozenFrame, setFrozenFrame] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (watching) {
+      setFrozenFrame(null);
+      return;
+    }
+    const video = contentRef.current?.querySelector("video");
+    if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d")?.drawImage(video, 0, 0);
+      setFrozenFrame(canvas.toDataURL());
+    } else {
+      setFrozenFrame(null);
+    }
+  }, [watching]);
 
   // Freeze the video (pause it) while not watching, and resume when watching.
   // While stopped we also watch for new video elements (e.g. LiveKit
@@ -570,21 +589,33 @@ const ScreenShareTileContent: FC<ScreenShareTileContentProps> = ({
       video={video}
       streamOverlay={
         watching ? undefined : (
-          <button
-            className={styles.watchStream}
-            aria-label={t("video_tile.watch_stream")}
-            onClick={(): void => {
-              vm.setWatching(true);
-              // Resume playback within the click gesture.
-              contentRef.current
-                ?.querySelectorAll("video")
-                .forEach((v) => void v.play().catch(() => {}));
-            }}
-            tabIndex={focusable ? undefined : -1}
-          >
-            <Play aria-hidden width={20} height={20} />
-            {t("video_tile.watch_stream")}
-          </button>
+          <div className={styles.streamOverlayInner}>
+            {frozenFrame !== null ? (
+              <img
+                className={styles.frozenFrame}
+                src={frozenFrame}
+                alt=""
+                aria-hidden
+              />
+            ) : (
+              <div className={styles.streamOverlayScrim} />
+            )}
+            <button
+              className={styles.watchStream}
+              aria-label={t("video_tile.watch_stream")}
+              onClick={(): void => {
+                vm.setWatching(true);
+                // Resume playback within the click gesture.
+                contentRef.current
+                  ?.querySelectorAll("video")
+                  .forEach((v) => void v.play().catch(() => {}));
+              }}
+              tabIndex={focusable ? undefined : -1}
+            >
+              <Play aria-hidden width={20} height={20} />
+              {t("video_tile.watch_stream")}
+            </button>
+          </div>
         )
       }
       userId={vm.userId}

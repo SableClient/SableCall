@@ -9,6 +9,8 @@ import { expect, onTestFinished, test, vi } from "vitest";
 import {
   type LocalTrackPublication,
   LocalVideoTrack,
+  ParticipantEvent,
+  RemoteTrackPublication,
   Track,
   TrackEvent,
 } from "livekit-client";
@@ -158,6 +160,86 @@ test("control a participant's screen share volume", () => {
       g: 0.8,
     });
   });
+});
+
+test("stop watching a remote screen share actually unsubscribes from the LiveKit track", () => {
+  const videoPublication = new RemoteTrackPublication(
+    Track.Kind.Video,
+    {
+      sid: "TR_screen",
+      name: "screen",
+      muted: false,
+    } as unknown as ConstructorParameters<typeof RemoteTrackPublication>[1],
+    true,
+    {},
+  );
+  const audioPublication = new RemoteTrackPublication(
+    Track.Kind.Audio,
+    {
+      sid: "TR_screen_audio",
+      name: "screen_audio",
+      muted: false,
+    } as unknown as ConstructorParameters<typeof RemoteTrackPublication>[1],
+    true,
+    {},
+  );
+  const setVideoSubscribedSpy = vi.spyOn(videoPublication, "setSubscribed");
+  const setAudioSubscribedSpy = vi.spyOn(audioPublication, "setSubscribed");
+  const vm = mockRemoteScreenShare(
+    rtcMembership,
+    {},
+    mockRemoteParticipant({
+      getTrackPublication: (source) => {
+        if (source === Track.Source.ScreenShare) return videoPublication;
+        if (source === Track.Source.ScreenShareAudio) return audioPublication;
+        return undefined;
+      },
+    }),
+  );
+
+  // Watching starts out enabled, so we should be subscribed to both the video
+  // and the screen share audio track.
+  expect(setVideoSubscribedSpy).toHaveBeenCalledWith(true);
+  expect(setAudioSubscribedSpy).toHaveBeenCalledWith(true);
+
+  // Stopping watching should unsubscribe both so that the data stops flowing.
+  vm.setWatching(false);
+  expect(setVideoSubscribedSpy).toHaveBeenLastCalledWith(false);
+  expect(setAudioSubscribedSpy).toHaveBeenLastCalledWith(false);
+
+  // Watching again should resubscribe both.
+  vm.setWatching(true);
+  expect(setVideoSubscribedSpy).toHaveBeenLastCalledWith(true);
+  expect(setAudioSubscribedSpy).toHaveBeenLastCalledWith(true);
+});
+
+test("screen share mute is re-applied when the audio track is re-subscribed", () => {
+  const setVolumeSpy = vi.fn();
+  const participant = mockRemoteParticipant({ setVolume: setVolumeSpy });
+  const vm = mockRemoteScreenShare(rtcMembership, {}, participant);
+
+  // Muting should set the screen share audio volume to 0.
+  vm.togglePlaybackMuted();
+  expect(setVolumeSpy).toHaveBeenLastCalledWith(
+    0,
+    Track.Source.ScreenShareAudio,
+  );
+
+  // Simulate the audio track being re-attached (e.g. after the user resumes
+  // watching): the current volume must be re-applied, otherwise the mute
+  // would be lost and the sound would come back.
+  const callsBefore = setVolumeSpy.mock.calls.length;
+  (
+    participant.emit as unknown as (
+      event: string,
+      ...args: unknown[]
+    ) => boolean
+  )(ParticipantEvent.TrackSubscribed, {});
+  expect(setVolumeSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+  expect(setVolumeSpy).toHaveBeenLastCalledWith(
+    0,
+    Track.Source.ScreenShareAudio,
+  );
 });
 
 test("local media remembers whether it should always be shown", () => {
