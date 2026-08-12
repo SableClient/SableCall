@@ -28,7 +28,7 @@ import { useTranslation } from "react-i18next";
 import { Header, LeftNav, RightNav, RoomHeaderInfo } from "../Header";
 import { HeaderStyle, useUrlParams } from "../UrlParams";
 import { useCallViewKeyboardShortcuts } from "../useCallViewKeyboardShortcuts";
-import { widget } from "../widget";
+import { widget, ElementWidgetActions } from "../widget";
 import styles from "./InCallView.module.css";
 import { GridTile } from "../tile/GridTile";
 import { SettingsModal, defaultSettingsTab } from "../settings/SettingsModal";
@@ -141,6 +141,21 @@ export const ActiveCall: FC<ActiveCallProps> = (props) => {
     setVm(vm);
 
     vm.leave$.pipe(scope.bind()).subscribe(props.onLeft);
+
+    // Forward currently speaking user IDs to the host client
+    if (widget) {
+      const widgetApi = widget.api;
+      vm.activeSpeakers$.pipe(scope.bind()).subscribe((speakers) => {
+        const userIds = speakers
+          .map((m) => m.userId)
+          .filter((id): id is string => typeof id === "string" && id !== "");
+        widgetApi.transport
+          .send(ElementWidgetActions.ActiveSpeakers, { userIds })
+          .catch((e) =>
+            rootLogger.error("Failed to send active speakers action", e),
+          );
+      });
+    }
 
     return (): void => {
       scope.end();

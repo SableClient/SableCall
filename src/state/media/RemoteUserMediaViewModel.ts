@@ -66,6 +66,20 @@ export function createRemoteUserMedia(
         ),
       ),
     ),
+    audioLevel$: scope.behavior(
+      pretendToBeDisconnected$.pipe(
+        switchMap((disconnected) =>
+          disconnected ? of(0) : baseUserMedia.audioLevel$,
+        ),
+      ),
+    ),
+    voiceActivity$: scope.behavior(
+      pretendToBeDisconnected$.pipe(
+        switchMap((disconnected) =>
+          disconnected ? of(false) : baseUserMedia.voiceActivity$,
+        ),
+      ),
+    ),
     videoEnabled$: scope.behavior(
       pretendToBeDisconnected$.pipe(
         switchMap((disconnected) =>
