@@ -13,17 +13,19 @@ import {
 } from "react";
 import { distinctUntilChanged } from "rxjs";
 import { useObservableEagerState } from "observable-hooks";
+import classNames from "classnames";
 
 import { type GridLayout as GridLayoutModel } from "../state/layout-types.ts";
 import styles from "./GridLayout.module.css";
 import { useInitial } from "../useInitial";
-import { type CallLayout, arrangeTiles } from "./CallLayout";
+import { type CallLayout, arrangeTilesWithStreams } from "./CallLayout";
 import { type DragCallback, useUpdateLayout, useVisibleTiles } from "./Grid";
 
 interface GridCSSProperties extends CSSProperties {
   "--gap": string;
   "--width": string;
   "--height": string;
+  "--columns": string;
 }
 
 /**
@@ -79,26 +81,54 @@ export const makeGridLayout: CallLayout<GridLayoutModel> = ({
     useUpdateLayout();
     useVisibleTiles(model.setVisibleTiles);
     const { width, height: minHeight } = useObservableEagerState(minBounds$);
-    const { gap, tileWidth, tileHeight } = useMemo(
-      () => arrangeTiles(width, minHeight, model.grid.length),
-      [width, minHeight, model.grid.length],
+    // Screen shares are shown as larger 2x2 tiles
+    const { gap, tileWidth, tileHeight, columns } = useMemo(() => {
+      const streamCount = model.grid.filter(
+        (m) => m.media$.value.type === "screen share",
+      ).length;
+      return arrangeTilesWithStreams(
+        width,
+        minHeight,
+        model.grid.length - streamCount,
+        streamCount,
+      );
+    }, [width, minHeight, model.grid]);
+
+    // Render camera tiles before screen shares
+    const orderedTiles = useMemo(
+      () => [
+        ...model.grid.filter((m) => m.media$.value.type !== "screen share"),
+        ...model.grid.filter((m) => m.media$.value.type === "screen share"),
+      ],
+      [model.grid],
     );
 
     return (
       <div
         ref={ref}
-        className={styles.scrolling}
+        className={classNames(styles.scrolling, {
+          [styles.focused]: model.focused,
+        })}
         style={
           {
             width,
             "--gap": `${gap}px`,
             "--width": `${Math.floor(tileWidth)}px`,
             "--height": `${Math.floor(tileHeight)}px`,
+            "--columns": `${columns}`,
           } as GridCSSProperties
         }
       >
-        {model.grid.map((m) => (
-          <Slot key={m.id} className={styles.slot} id={m.id} model={m} />
+        {orderedTiles.map((m) => (
+          <Slot
+            key={m.id}
+            className={classNames(styles.slot, {
+              [styles.focused]: model.focused,
+            })}
+            id={m.id}
+            model={m}
+            data-stream={m.media$.value.type === "screen share" || undefined}
+          />
         ))}
       </div>
     );

@@ -16,6 +16,15 @@ Please see LICENSE in the repository root for full details.
   place-items: stretch;
 }
 
+.streamOverlay {
+  grid-area: content;
+  place-self: stretch;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
 .media video {
   inline-size: 100%;
   block-size: 100%;

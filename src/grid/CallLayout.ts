@@ -107,3 +107,18 @@ export function arrangeTiles(
 
   return { tileWidth, tileHeight, gap, columns };
 }
+
+/**
+ * @param cameraCount - Number of regular participant tiles
+ * @param streamCount - Number of screen shares
+ */
+export function arrangeTilesWithStreams(
+  width: number,
+  minHeight: number,
+  cameraCount: number,
+  streamCount: number,
+): GridArrangement {
+  // Each stream occupies a 2x2 block, so it consumes four regular cells worth of space.
+  const effectiveTileCount = cameraCount + streamCount * 4;
+  return arrangeTiles(width, minHeight, effectiveTileCount);
+}

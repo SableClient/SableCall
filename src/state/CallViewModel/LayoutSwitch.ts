@@ -5,14 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
 Please see LICENSE in the repository root for full details.
 */
 
-import {
-  combineLatest,
-  map,
-  Subject,
-  startWith,
-  skipWhile,
-  switchMap,
-} from "rxjs";
+import { map, Subject, startWith, skipWhile, switchMap } from "rxjs";
 
 import { type GridMode, type WindowMode } from "./CallViewModel.ts";
 import { constant, type Behavior } from "../Behavior.ts";
@@ -25,12 +18,10 @@ import { type ObservableScope } from "../ObservableScope.ts";
  *
  * @param scope - The observable scope to manage subscriptions.
  * @param windowMode$ - The current window mode.
- * @param hasRemoteScreenShares$ - A behavior indicating if there are remote screen shares active.
  */
 export function createLayoutModeSwitch(
   scope: ObservableScope,
   windowMode$: Behavior<WindowMode>,
-  hasRemoteScreenShares$: Behavior<boolean>,
 ): {
   gridMode$: Behavior<GridMode>;
   setGridMode: (value: GridMode) => void;
@@ -38,7 +29,7 @@ export function createLayoutModeSwitch(
   const userSelection$ = new Subject<GridMode>();
   // Callback to set the grid mode desired by the user.
   // Notice that this is only a preference, the actual grid mode can be overridden
-  // if there is a remote screen share active.
+  // if the window mode is flat.
   const setGridMode = (value: GridMode): void => userSelection$.next(value);
 
   /**
@@ -46,15 +37,11 @@ export function createLayoutModeSwitch(
    * not accounting for the user's manual selections.
    */
   const naturalGridMode$ = scope.behavior<GridMode>(
-    combineLatest(
-      [hasRemoteScreenShares$, windowMode$],
-      (hasRemoteScreenShares, windowMode) =>
-        // When there are screen shares or the window is flat (as with a phone
-        // in landscape orientation), spotlight is a better experience.
-        // We want screen shares to be big and readable, and we want flipping
-        // your phone into landscape to be a quick way of maximising the
-        // spotlight tile.
-        hasRemoteScreenShares || windowMode === "flat" ? "spotlight" : "grid",
+    // When the window is flat (as with a phone in landscape orientation),
+    // spotlight is a better experience: flipping your phone into landscape is
+    // a quick way of maximising the spotlight tile. 
+    windowMode$.pipe(
+      map((windowMode) => (windowMode === "flat" ? "spotlight" : "grid")),
     ),
   );
 

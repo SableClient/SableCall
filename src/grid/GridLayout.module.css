@@ -11,16 +11,34 @@ Please see LICENSE in the repository root for full details.
 }
 
 .scrolling {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(var(--columns), var(--width));
+  grid-auto-rows: var(--height);
+  grid-auto-flow: row;
   justify-content: center;
   align-content: center;
   gap: var(--gap);
 }
 
 .scrolling > .slot {
-  width: var(--width);
-  height: var(--height);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Larger tiles for Screen shares in Grids */
+.scrolling > .slot[data-stream="true"] {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+/* Focused tile takes up the entire grid area */
+.scrolling.focused {
+  display: block;
+}
+
+.scrolling.focused > .slot {
+  width: 100%;
+  height: 100%;
 }
 
 .fixed {

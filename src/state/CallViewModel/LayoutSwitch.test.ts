@@ -12,12 +12,10 @@ import { testScope, withTestScheduler } from "../../utils/test";
 
 function testLayoutSwitch({
   windowMode = "n",
-  hasScreenShares = "n",
   userSelection = "",
   expectedGridMode,
 }: {
   windowMode?: string;
-  hasScreenShares?: string;
   userSelection?: string;
   expectedGridMode: string;
 }): void {
@@ -25,7 +23,6 @@ function testLayoutSwitch({
     const { gridMode$, setGridMode } = createLayoutModeSwitch(
       testScope(),
       behavior(windowMode, { n: "normal", N: "narrow", f: "flat" }),
-      behavior(hasScreenShares, { y: true, n: false }),
     );
     schedule(userSelection, {
       g: () => setGridMode("grid"),
@@ -57,49 +54,6 @@ test("allows switching modes manually", () =>
     expectedGridMode: "g-sgs",
   }));
 
-test("switches to spotlight mode when there is a remote screen share", () =>
-  testLayoutSwitch({
-    hasScreenShares: " n--y",
-    expectedGridMode: "g--s",
-  }));
-
-test("can manually switch to grid when there is a screenshare", () =>
-  testLayoutSwitch({
-    hasScreenShares: " n-y",
-    userSelection: "   ---g",
-    expectedGridMode: "g-sg",
-  }));
-
-test("auto-switches after manually selecting grid", () =>
-  testLayoutSwitch({
-    // Two screenshares will happen in sequence. There is a screen share that
-    // forces spotlight, then the user manually switches back to grid.
-    hasScreenShares: " n-y-ny",
-    userSelection: "   ---g",
-    expectedGridMode: "g-sg-s",
-    // If we did want to respect manual selection, the expectation would be: g-sg
-  }));
-
-test("switches back to grid mode when the remote screen share ends", () =>
-  testLayoutSwitch({
-    hasScreenShares: " n--y--n",
-    expectedGridMode: "g--s--g",
-  }));
-
-test("auto-switches to spotlight again after first screen share ends", () =>
-  testLayoutSwitch({
-    hasScreenShares: " nyny",
-    expectedGridMode: "gsgs",
-  }));
-
-test("switches manually to grid after screen share while manually in spotlight", () =>
-  testLayoutSwitch({
-    // Initially, no one is sharing. Then the user manually switches to spotlight.
-    // After a screen share starts, the user manually switches to grid.
-    hasScreenShares: " n-y",
-    userSelection: "   -s-g",
-    expectedGridMode: "gs-g",
-  }));
 
 test("auto-switches to spotlight when in flat window mode", () =>
   testLayoutSwitch({
@@ -117,16 +71,9 @@ test("allows switching modes manually when in flat window mode", () =>
     expectedGridMode: "gsgsg",
   }));
 
-test("stays in spotlight while there are screen shares even when window mode changes", () =>
+test("returns to grid mode when the window returns to a normal shape", () =>
   testLayoutSwitch({
-    windowMode: "      nfn",
-    hasScreenShares: " y",
-    expectedGridMode: "s",
-  }));
-
-test("ignores end of screen share until window mode returns to normal", () =>
-  testLayoutSwitch({
-    windowMode: "      nf-n",
-    hasScreenShares: " y-n",
-    expectedGridMode: "s--g",
+    // Window starts flat (spotlight), then returns to a normal shape.
+    windowMode: "f n",
+    expectedGridMode: "sg",
   }));

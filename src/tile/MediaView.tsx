@@ -55,6 +55,7 @@ interface Props extends ComponentProps<typeof animated.div> {
   rtcBackendIdentity?: string;
   // The focus url, mainly for debugging purposes
   focusUrl?: string;
+  streamOverlay?: ReactNode;
 }
 
 export const MediaView: FC<Props> = ({
@@ -85,6 +86,7 @@ export const MediaView: FC<Props> = ({
   videoStreamStats,
   rtcBackendIdentity,
   focusUrl,
+  streamOverlay,
   ...props
 }) => {
   const { t } = useTranslation();
@@ -211,6 +213,9 @@ export const MediaView: FC<Props> = ({
         )}
         {primaryButton}
       </div>
+      {streamOverlay !== undefined && (
+        <div className={styles.streamOverlay}>{streamOverlay}</div>
+      )}
     </animated.div>
   );
 };

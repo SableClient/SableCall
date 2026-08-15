@@ -20,8 +20,8 @@ import { type Behavior } from "./Behavior.ts";
 export interface GridLayoutMedia {
   type: "grid";
   edgeToEdge: false;
-  spotlight?: MediaViewModel[];
-  grid: UserMediaViewModel[];
+  grid: MediaViewModel[];
+  focused?: boolean;
 }
 
 export interface SpotlightLandscapeLayoutMedia {
@@ -85,6 +85,7 @@ export interface GridLayout {
   grid: GridTileViewModel[];
   spotlightAlignment$: BehaviorSubject<Alignment>;
   setVisibleTiles: (value: number) => void;
+  focused?: boolean;
 }
 
 export interface SpotlightLandscapeLayout {

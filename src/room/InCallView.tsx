@@ -454,6 +454,8 @@ export const InCallView: FC<InCallViewProps> = ({
             showRingingStatus={showRingingStatus}
             showOutline={showOutline}
             focusable={!contentObscured}
+            focusedStream$={vm.focusedStream$}
+            onToggleFocusedStream={vm.setFocusedStream}
           />
         ) : (
           <SpotlightTile

@@ -94,6 +94,79 @@ borders don't support gradients */
   width: 100%;
 }
 
+.maximise {
+  display: flex;
+  align-items: center;
+}
+
+.maximise > svg {
+  display: block;
+  color: var(--cpd-color-icon-primary);
+}
+
+.streamOverlayInner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.streamOverlayInner > * {
+  pointer-events: auto;
+}
+
+.streamOverlayScrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.frozenFrame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--cpd-color-bg-canvas-default);
+  filter: blur(8px);
+  transform: scale(1.05);
+}
+
+.watchStream {
+  appearance: none;
+  border: none;
+  border-radius: var(--cpd-radius-pill-effect);
+  padding: var(--cpd-space-3x) var(--cpd-space-5x);
+  background: var(--cpd-color-bg-action-primary-rest);
+  color: var(--cpd-color-text-on-primary);
+  box-shadow: var(--small-drop-shadow);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--cpd-space-2x);
+  font: inherit;
+  font-weight: 600;
+  font-size: var(--cpd-font-size-body-lg);
+  z-index: 1;
+}
+
+.watchStream > svg {
+  display: block;
+  color: var(--cpd-color-text-on-primary);
+}
+
+@media (hover) {
+  .watchStream:hover {
+    background: var(--cpd-color-bg-action-primary-hovered);
+  }
+}
+
+.watchStream:active {
+  background: var(--cpd-color-bg-action-primary-pressed);
+}
+
 .tile .switchCamera {
   opacity: 1;
   background: var(--cpd-color-bg-action-secondary-rest);

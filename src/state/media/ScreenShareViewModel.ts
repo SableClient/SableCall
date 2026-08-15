@@ -7,7 +7,9 @@ Please see LICENSE in the repository root for full details.
 */
 
 import { Track } from "livekit-client";
+import { Subject, startWith } from "rxjs";
 
+import { type Behavior } from "../Behavior";
 import { type ObservableScope } from "../ObservableScope";
 import { type LocalScreenShareViewModel } from "./LocalScreenShareViewModel";
 import {
@@ -29,6 +31,8 @@ export type ScreenShareViewModel =
  */
 export interface BaseScreenShareViewModel extends BaseMemberMediaViewModel {
   type: "screen share";
+  watching$: Behavior<boolean>;
+  setWatching: (watching: boolean) => void;
 }
 
 export type BaseScreenShareInputs = Omit<
@@ -40,6 +44,8 @@ export function createBaseScreenShare(
   scope: ObservableScope,
   inputs: BaseScreenShareInputs,
 ): BaseScreenShareViewModel {
+  const watchingRequest$ = new Subject<boolean>();
+  const watching$ = scope.behavior(watchingRequest$.pipe(startWith(true)));
   return {
     ...createMemberMedia(scope, {
       ...inputs,
@@ -47,5 +53,7 @@ export function createBaseScreenShare(
       videoSource: Track.Source.ScreenShare,
     }),
     type: "screen share",
+    watching$,
+    setWatching: (watching: boolean): void => watchingRequest$.next(watching),
   };
 }
