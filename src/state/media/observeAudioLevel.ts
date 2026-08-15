@@ -38,8 +38,8 @@ import {
 // Constants for audio level detection and debounce
 export const AUDIO_LEVEL_SAMPLE_INTERVAL_MS = 100;
 export const VOICE_ACTIVITY_THRESHOLD = 0.05;
-export const VOICE_ACTIVITY_HOLD_THRESHOLD = 0.02;
-export const VOICE_ACTIVITY_CONFIRM_MS = 50;
+export const VOICE_ACTIVITY_HOLD_THRESHOLD = 0.1;
+export const VOICE_ACTIVITY_CONFIRM_MS = 0;
 export const VOICE_ACTIVITY_DROP_OFF_MS = 50;
 
 export type AudioAnalyserFactory = (
