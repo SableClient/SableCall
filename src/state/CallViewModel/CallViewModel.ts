@@ -61,6 +61,7 @@ import {
 import {
   duplicateTiles,
   echoCancellationSetting,
+  hideAvatarTilesWhenCameraOff,
   noiseSuppressionSetting,
   playReactionsSound,
   rnnoiseNoiseSuppression,
@@ -964,7 +965,29 @@ export function createCallViewModel$(
   );
 
   const grid$ = scope.behavior<UserMediaViewModel[]>(
-    userMedia$.pipe(
+    combineLatest([userMedia$, hideAvatarTilesWhenCameraOff.value$]).pipe(
+      switchMap(([mediaItems, hideAvatars]) =>
+        hideAvatars
+          ? // When enabled, only generate tiles for participants whose camera
+            // is on. Participants with their camera off remain audible but
+            // have no tile, keeping voice calls tidy.
+            mediaItems.length === 0
+            ? of([])
+            : combineLatest(
+                mediaItems.map((m) =>
+                  m.videoEnabled$.pipe(
+                    map((videoEnabled) => [m, videoEnabled] as const),
+                  ),
+                ),
+              ).pipe(
+                map((pairs) =>
+                  pairs
+                    .filter(([, videoEnabled]) => videoEnabled)
+                    .map(([m]) => m),
+                ),
+              )
+          : of(mediaItems),
+      ),
       switchMap((mediaItems) => {
         const bins = mediaItems.map((m) =>
           m.bin$.pipe(map((bin) => [m, bin] as const)),
@@ -1083,7 +1106,7 @@ export function createCallViewModel$(
 
   const { setGridMode, gridMode$ } = createLayoutModeSwitch(scope, windowMode$);
 
-  // A single screen share can be focused (maximised) to fill the grid 
+  // A single screen share can be focused (maximised) to fill the grid
   const focusedStreamRequest$ = new Subject<ScreenShareViewModel | null>();
   const focusedStream$ = scope.behavior<ScreenShareViewModel | null>(
     focusedStreamRequest$.pipe(
@@ -1093,8 +1116,7 @@ export function createCallViewModel$(
           ? of(null)
           : screenShares$.pipe(
               map(
-                (shares) =>
-                  shares.find((s) => s.id === requested.id) ?? null,
+                (shares) => shares.find((s) => s.id === requested.id) ?? null,
               ),
               distinctUntilChanged(),
             ),
