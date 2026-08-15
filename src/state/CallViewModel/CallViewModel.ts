@@ -312,6 +312,8 @@ export interface CallViewModel {
   /** use the layout instead, this is just for the sdk export. */
   remoteMatrixLivekitMembers$: Behavior<RemoteMatrixLivekitMember[]>;
   localMatrixLivekitMember$: Behavior<LocalMatrixLivekitMember | null>;
+  /** All user media (local + remote) with their live speaking status */
+  userMedia$: Behavior<WrappedUserMediaViewModel[]>;
   /** List of participants raising their hand */
   handsRaised$: Behavior<Record<string, RaisedHandInfo>>;
   /** List of reactions. Keys are: membership.membershipId (currently predefined as: `${membershipEvent.userId}:${membershipEvent.deviceId}`)*/
@@ -353,6 +355,7 @@ export interface CallViewModel {
   showSpotlightIndicators$: Behavior<boolean>;
   showSpeakingIndicators$: Behavior<boolean>;
   showNameTags$: Behavior<boolean>;
+  activeSpeakers$: Behavior<UserMediaViewModel[]>;
   spotlightExpanded$: Behavior<boolean>;
   toggleSpotlightExpanded$: Behavior<(() => void) | null>;
   gridMode$: Behavior<GridMode>;
@@ -939,6 +942,24 @@ export function createCallViewModel$(
               // Otherwise, spotlight the local user
               mediaItems.find(([m]) => m.local)?.[0]);
       }, undefined),
+    ),
+  );
+  // All active speakers in a call
+  const activeSpeakers$ = scope.behavior<UserMediaViewModel[]>(
+    userMedia$.pipe(
+      switchMap((mediaItems) =>
+        mediaItems.length === 0
+          ? of([])
+          : combineLatest(
+              mediaItems.map((m) =>
+                m.voiceActivity$.pipe(map((v) => [m, v] as const)),
+              ),
+            ),
+      ),
+      map((mediaItems) =>
+        mediaItems.filter(([, v]) => v).map(([m]) => m),
+      ),
+      distinctUntilChanged(shallowEquals),
     ),
   );
 
@@ -1809,6 +1830,7 @@ export function createCallViewModel$(
     setFocusedStream,
     layout$: layout$,
     localMatrixLivekitMember$,
+    userMedia$,
     remoteMatrixLivekitMembers$: scope.behavior(
       remoteMatrixLivekitMembers$.pipe(
         map((members) => members.value),
@@ -1829,6 +1851,7 @@ export function createCallViewModel$(
     showSpotlightIndicators$: showSpotlightIndicators$,
     showSpeakingIndicators$: showSpeakingIndicators$,
     showNameTags$,
+    activeSpeakers$,
     showHeader$: showHeader$,
     showFooter$: showFooter$,
     settingsOpen$: settingsOpen$,
