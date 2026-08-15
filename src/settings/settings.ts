@@ -158,6 +158,11 @@ export const muteAllAudio = new Setting<boolean>("mute-all-audio", false);
 
 export const alwaysShowSelf = new Setting<boolean>("always-show-self", true);
 
+export const hideAvatarTilesWhenCameraOff = new Setting<boolean>(
+  "hide-avatars-when-camera-off",
+  false,
+);
+
 export const alwaysShowIphoneEarpiece = new Setting<boolean>(
   "always-show-iphone-earpiece",
   false,
