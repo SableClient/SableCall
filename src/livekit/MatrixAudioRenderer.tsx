@@ -18,6 +18,8 @@ import { logger as rootLogger } from "matrix-js-sdk/lib/logger";
 
 import { useEarpieceAudioConfig } from "../MediaDevicesContext";
 import { useReactiveState } from "../useReactiveState";
+import { useBehavior } from "../useBehavior";
+import { boostedParticipants$ } from "../state/participantVolume";
 import * as controls from "../controls";
 
 export interface MatrixAudioRendererProps {
@@ -107,7 +109,13 @@ export function LivekitRoomAudioRenderer({
   // shouldUseAudioContext is set to false if stereoPan === 0 to allow standby bluetooth playback.
 
   const { pan: stereoPan, volume: volumeFactor } = useEarpieceAudioConfig();
-  const shouldUseAudioContext = stereoPan !== 0;
+  // A participant whose volume is above 100% needs WebAudio routing: the gain
+  // node supports volumes above 1, whereas the volume of a plain
+  // HTMLMediaElement is clamped to 1. When nobody is boosted we keep the
+  // previous behavior and only use the audio context for the earpiece.
+  const boosted = useBehavior(boostedParticipants$);
+  const anyBoosted = validIdentities.some((id) => boosted.has(id));
+  const shouldUseAudioContext = anyBoosted || stereoPan !== 0;
 
   // initialize the potentially used audio context.
   const [audioContext, setAudioContext] = useState<AudioContext | undefined>(
@@ -120,6 +128,25 @@ export function LivekitRoomAudioRenderer({
       void ctx.close();
     };
   }, []);
+  // The AudioContext starts suspended until a user gesture; it must be running
+  // for volumes above 100% (applied via the WebAudio gain node) to amplify.
+  useEffect(() => {
+    if (audioContext === undefined) return;
+    const resume = (): void => {
+      if (audioContext.state === "suspended") void audioContext.resume();
+    };
+    resume();
+    // Browsers require a user gesture to resume an AudioContext, so retry on
+    // any interaction.
+    document.addEventListener("pointerdown", resume);
+    document.addEventListener("keydown", resume);
+    document.addEventListener("touchstart", resume);
+    return (): void => {
+      document.removeEventListener("pointerdown", resume);
+      document.removeEventListener("keydown", resume);
+      document.removeEventListener("touchstart", resume);
+    };
+  }, [audioContext]);
   const audioNodes = useMemo(
     () => ({
       gain: audioContext?.createGain(),
@@ -185,11 +212,14 @@ function AudioTrackWithAudioNodes({
   // This is used to unmount/remount the AudioTrack component.
   // Mounting needs to happen after the audioContext is set.
   // (adding the audio context when already mounted did not work outside strict mode)
+  const mediaStream = trackRef?.publication.track?.mediaStream;
   const [trackReady, setTrackReady] = useReactiveState(
     () => false,
-    // We only want the track to reset once both (audioNodes and audioContext) are set.
-    // for unsetting the audioContext its enough if one of the two is undefined.
-    [audioContext && audioNodes],
+    // We want the track to reset when the audio context becomes available,
+    // and when the underlying media stream changes (e.g. on encryption
+    // renegotiation, where the WebAudio source node would otherwise stay
+    // bound to the old stream).
+    [audioContext && audioNodes, mediaStream],
   );
 
   useEffect(() => {

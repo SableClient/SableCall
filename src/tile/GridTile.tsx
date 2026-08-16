@@ -46,6 +46,7 @@ import { useObservableEagerState } from "observable-hooks";
 
 import styles from "./GridTile.module.css";
 import { Slider } from "../Slider";
+import { MAX_PLAYBACK_VOLUME } from "../state/VolumeControls";
 import { MediaView } from "./MediaView";
 import { useLatest } from "../useLatest";
 import { type GridTileViewModel } from "../state/TileViewModel";
@@ -398,7 +399,7 @@ const RemoteUserMediaTile: FC<RemoteUserMediaTileProps> = ({
               onValueChange={vm.adjustPlaybackVolume}
               onValueCommit={vm.commitPlaybackVolume}
               min={0}
-              max={1}
+              max={MAX_PLAYBACK_VOLUME}
               step={0.01}
             />
           </MenuItem>
@@ -497,7 +498,7 @@ const RemoteScreenShareTileContent: FC<
               onValueChange={vm.adjustPlaybackVolume}
               onValueCommit={vm.commitPlaybackVolume}
               min={0}
-              max={1}
+              max={MAX_PLAYBACK_VOLUME}
               step={0.01}
             />
           </MenuItem>

@@ -124,6 +124,13 @@ describe("saveTileVolume", () => {
     });
   });
 
+  it("stores boosted volumes above 1", () => {
+    saveTileVolume("@alice:example.org:DEVICE", 2);
+    expect(tileVolumes.getValue()).toEqual({
+      "@alice:example.org:DEVICE": 2,
+    });
+  });
+
   it("removes the entry when set back to the default volume", () => {
     saveTileVolume("@alice:example.org:DEVICE", 0.5);
     saveTileVolume("@alice:example.org:DEVICE", 1);

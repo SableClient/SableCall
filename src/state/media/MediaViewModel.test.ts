@@ -26,6 +26,7 @@ import {
   mockRemoteParticipant,
   mockRemoteScreenShare,
 } from "../../utils/test";
+import { tileVolumes } from "../../settings/settings";
 import { constant } from "../Behavior";
 
 global.MediaStreamTrack = class {} as unknown as {
@@ -91,6 +92,36 @@ test("control a participant's volume", () => {
       e: 0.2,
       f: 0,
       g: 0.8,
+    });
+  });
+});
+
+test("a participant's volume can be boosted above 100%", () => {
+  // Don't let volumes persisted by earlier tests leak into this one.
+  tileVolumes.setValue({});
+  const setVolumeSpy = vi.fn();
+  const vm = mockRemoteMedia(
+    rtcMembership,
+    {},
+    mockRemoteParticipant({ setVolume: setVolumeSpy }),
+  );
+  withTestScheduler(({ expectObservable, schedule }) => {
+    schedule("-ab|", {
+      a() {
+        // Boost the volume above the base volume
+        vm.adjustPlaybackVolume(1.5);
+        expect(setVolumeSpy).toHaveBeenLastCalledWith(1.5);
+      },
+      b() {
+        // Back below the base volume
+        vm.adjustPlaybackVolume(0.9);
+        expect(setVolumeSpy).toHaveBeenLastCalledWith(0.9);
+      },
+    });
+    expectObservable(vm.playbackVolume$).toBe("abc", {
+      a: 1,
+      b: 1.5,
+      c: 0.9,
     });
   });
 });

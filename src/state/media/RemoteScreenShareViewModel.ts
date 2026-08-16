@@ -25,6 +25,7 @@ import { type ObservableScope } from "../ObservableScope";
 import { createVolumeControls, type VolumeControls } from "../VolumeControls";
 import { observeTrackReference$ } from "../observeTrackReference";
 import { saveTileVolume, tileVolumes } from "../../settings/settings";
+import { setParticipantBoosted } from "../participantVolume";
 
 export interface RemoteScreenShareViewModel
   extends BaseScreenShareViewModel, VolumeControls {
@@ -106,6 +107,8 @@ export function createRemoteScreenShare(
       ),
       initialVolume: tileVolumes.getValue()[savedVolumeKey],
       onVolumeCommitted: (volume) => saveTileVolume(savedVolumeKey, volume),
+      onBoostedChange: (boosted) =>
+        setParticipantBoosted(inputs.rtcBackendIdentity, boosted),
     }),
     local: false,
     videoEnabled$: scope.behavior(
