@@ -153,7 +153,6 @@ import {
   type WrappedUserMediaViewModel,
 } from "../media/WrappedUserMediaViewModel.ts";
 import { type ScreenShareViewModel } from "../media/ScreenShareViewModel.ts";
-import { type RemoteScreenShareViewModel } from "../media/RemoteScreenShareViewModel.ts";
 import { type UserMediaViewModel } from "../media/UserMediaViewModel.ts";
 import { type MediaViewModel } from "../media/MediaViewModel.ts";
 import { type LocalUserMediaViewModel } from "../media/LocalUserMediaViewModel.ts";
@@ -311,13 +310,6 @@ export interface CallViewModel {
   allConnections$: Behavior<ConnectionManagerData>;
   /** Participants sorted by livekit room so they can be used in the audio rendering */
   livekitRoomItems$: Behavior<LivekitRoomItem[]>;
-  /**
-   * The identities of remote participants whose volume is boosted above 100%,
-   * grouped by LiveKit room URL. Used by the audio renderer to decide whether
-   * it needs to route audio through a WebAudio gain node (which is required
-   * to amplify past the HTMLMediaElement's maximum volume of 1).
-   */
-  boostedParticipants$: Behavior<Record<string, string[]>>;
   /** use the layout instead, this is just for the sdk export. */
   remoteMatrixLivekitMembers$: Behavior<RemoteMatrixLivekitMember[]>;
   localMatrixLivekitMember$: Behavior<LocalMatrixLivekitMember | null>;
@@ -803,79 +795,6 @@ export function createCallViewModel$(
           }),
       ),
     ),
-  );
-
-  /**
-   * The identities of remote participants whose playback volume is boosted
-   * above 100%, grouped by the URL of the LiveKit room they're in. The audio
-   * renderer needs this to know when to route audio through a WebAudio gain
-   * node (required to amplify past the HTMLMediaElement's volume cap of 1).
-   */
-  const boostedParticipants$ = scope.behavior(
-    userMedia$.pipe(
-      switchMap((mediaItems) => {
-        if (mediaItems.length === 0) return of({});
-        // Each wrapped media item carries its own boosted state (microphone)
-        // plus any screen share media, which have their own separate volumes.
-        return combineLatest(
-          mediaItems.map((m) => {
-            const micBoosted$ = m.local
-              ? of<boolean>(false)
-              : (m as RemoteUserMediaViewModel).boosted$;
-            const screenShareBoosted$ = m.screenShares$.pipe(
-              switchMap((shares) =>
-                shares.length === 0
-                  ? of<boolean>(false)
-                  : combineLatest(
-                      shares.map((share) =>
-                        share.local
-                          ? of<boolean>(false)
-                          : (share as RemoteScreenShareViewModel).boosted$,
-                      ),
-                    ).pipe(map((boosts) => boosts.some(Boolean))),
-              ),
-            );
-            const rtcBackendIdentity = m.rtcBackendIdentity;
-            return combineLatest([
-              m.focusUrl$,
-              micBoosted$,
-              screenShareBoosted$,
-            ]).pipe(
-              map(([url, mic, share]) => ({
-                rtcBackendIdentity,
-                url,
-                boosted: mic || share,
-              })),
-            );
-          }),
-        ).pipe(
-          map((entries) =>
-            entries.reduce<Record<string, string[]>>((acc, entry) => {
-              if (entry.url === undefined || !entry.boosted) return acc;
-              (acc[entry.url] ??= []).push(entry.rtcBackendIdentity);
-              return acc;
-            }, {}),
-          ),
-          // Only re-render the audio renderer when the set of boosted
-          // participants actually changes.
-          distinctUntilChanged((a, b) => {
-            const aKeys = Object.keys(a);
-            const bKeys = Object.keys(b);
-            if (aKeys.length !== bKeys.length) return false;
-            return aKeys.every((key) => {
-              const aList = a[key];
-              const bList = b[key];
-              return (
-                Array.isArray(bList) &&
-                aList.length === bList.length &&
-                aList.every((id, i) => id === bList[i])
-              );
-            });
-          }),
-        );
-      }),
-    ),
-    {},
   );
 
   const ringingMedia$ = scope.behavior<RingingMediaViewModel | null>(
@@ -1965,7 +1884,6 @@ export function createCallViewModel$(
     audioOutputSwitcher$: audioOutputSwitcher$,
     reconnecting$: localMembership.reconnecting$,
     livekitRoomItems$,
-    boostedParticipants$,
     connected$: localMembership.connected$,
   };
 }

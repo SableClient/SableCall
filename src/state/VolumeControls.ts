@@ -7,6 +7,7 @@ Please see LICENSE in the repository root for full details.
 
 import {
   combineLatest,
+  distinctUntilChanged,
   map,
   merge,
   of,
@@ -26,37 +27,11 @@ import { accumulate } from "../utils/observable";
 export const MAX_PLAYBACK_VOLUME = 2;
 
 /**
- * The default playback volume, as a scalar multiplier of the stream's base
- * volume.
- */
-export const DEFAULT_PLAYBACK_VOLUME = 1;
-
-/**
- * Clamp a playback volume to the supported range [0, MAX_PLAYBACK_VOLUME].
- */
-export function clampPlaybackVolume(volume: number): number {
-  return Math.max(0, Math.min(MAX_PLAYBACK_VOLUME, volume));
-}
-
-/**
  * Controls for audio playback volume.
  */
 export interface VolumeControls {
-  /**
-   * The volume to which the audio is set, as a scalar multiplier. In the
-   * range [0, MAX_PLAYBACK_VOLUME]; values above 1 boost the volume past
-   * 100%.
-   */
   playbackVolume$: Behavior<number>;
-  /**
-   * Whether playback of this audio is disabled.
-   */
   playbackMuted$: Behavior<boolean>;
-  /**
-   * Whether the requested playback volume is above the stream's base volume
-   * (i.e. amplification beyond 100% is requested).
-   */
-  boosted$: Behavior<boolean>;
   togglePlaybackMuted: () => void;
   adjustPlaybackVolume: (value: number) => void;
   commitPlaybackVolume: () => void;
@@ -64,23 +39,15 @@ export interface VolumeControls {
 
 interface VolumeControlsInputs {
   pretendToBeDisconnected$: Behavior<boolean>;
-  /**
-   * The callback to run to notify the module performing audio playback of the
-   * requested volume.
-   */
   sink$: Behavior<(volume: number) => void>;
-  /**
-   * The volume to start at, e.g. restored from a saved preference. Defaults
-   * to 1.
-   */
   initialVolume?: number;
-  /**
-   * Called with the newly committed volume whenever the user finishes
-   * adjusting it (i.e. on commit, not while dragging). Not called for mute
-   * toggles or when the slider is released at zero, since those keep the
-   * previous committed volume.
-   */
   onVolumeCommitted?: (volume: number) => void;
+  /**
+   * Called with whether the volume is above 100% whenever it changes, so the
+   * audio renderer can route the participant's audio through a WebAudio gain
+   * node (required to amplify past the HTMLMediaElement's volume cap of 1).
+   */
+  onBoostedChange?: (boosted: boolean) => void;
 }
 
 /**
@@ -92,10 +59,13 @@ export function createVolumeControls(
   {
     pretendToBeDisconnected$,
     sink$,
-    initialVolume = DEFAULT_PLAYBACK_VOLUME,
+    initialVolume = 1,
     onVolumeCommitted,
+    onBoostedChange,
   }: VolumeControlsInputs,
 ): VolumeControls {
+  const clamp = (v: number): number =>
+    Math.max(0, Math.min(MAX_PLAYBACK_VOLUME, v));
   const toggleMuted$ = new Subject<"toggle mute">();
   const adjustVolume$ = new Subject<number>();
   const commitVolume$ = new Subject<"commit">();
@@ -104,8 +74,8 @@ export function createVolumeControls(
     merge(toggleMuted$, adjustVolume$, commitVolume$).pipe(
       accumulate(
         {
-          volume: clampPlaybackVolume(initialVolume),
-          committedVolume: clampPlaybackVolume(initialVolume),
+          volume: clamp(initialVolume),
+          committedVolume: clamp(initialVolume),
         },
         (state, event) => {
           switch (event) {
@@ -124,10 +94,9 @@ export function createVolumeControls(
                   state.volume === 0 ? state.committedVolume : state.volume,
               };
             default:
-              // Volume adjustment. Clamp so that nothing above the maximum
-              // can slip through (e.g. an out-of-date slider or a stale
-              // saved preference).
-              return { ...state, volume: clampPlaybackVolume(event) };
+              // Clamp so nothing above the maximum can slip through (e.g. a
+              // stale saved preference).
+              return { ...state, volume: clamp(event) };
           }
         },
       ),
@@ -159,15 +128,17 @@ export function createVolumeControls(
     .pipe(scope.bind())
     .subscribe(([sink, volume]) => sink(volume));
 
+  // Notify the audio renderer when this stream starts/stops needing a boost.
+  if (onBoostedChange !== undefined) {
+    playbackVolume$
+      .pipe(map((volume) => volume > 1), distinctUntilChanged(), scope.bind())
+      .subscribe(onBoostedChange);
+  }
+
   return {
     playbackVolume$,
     playbackMuted$: scope.behavior<boolean>(
       playbackVolume$.pipe(map((volume) => volume === 0)),
-    ),
-    // Whether the volume is above the base volume, in which case the audio
-    // needs to be amplified past 100%.
-    boosted$: scope.behavior<boolean>(
-      playbackVolume$.pipe(map((volume) => volume > 1)),
     ),
     togglePlaybackMuted: () => toggleMuted$.next("toggle mute"),
     adjustPlaybackVolume: (value: number) => adjustVolume$.next(value),

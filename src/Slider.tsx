@@ -10,15 +10,7 @@ import { Root, Track, Range, Thumb } from "@radix-ui/react-slider";
 import classNames from "classnames";
 import { Tooltip } from "@vector-im/compound-web";
 
-import { MAX_PLAYBACK_VOLUME } from "./state/VolumeControls";
 import styles from "./Slider.module.css";
-
-/**
- * The maximum value (inclusive) of the volume sliders, expressed as a scalar
- * multiplier of the audio stream's base volume. Values above 1 boost the
- * volume past 100%.
- */
-export const MAX_SLIDER_VOLUME = MAX_PLAYBACK_VOLUME;
 
 interface Props {
   className?: string;

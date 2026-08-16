@@ -18,6 +18,8 @@ import { logger as rootLogger } from "matrix-js-sdk/lib/logger";
 
 import { useEarpieceAudioConfig } from "../MediaDevicesContext";
 import { useReactiveState } from "../useReactiveState";
+import { useBehavior } from "../useBehavior";
+import { boostedParticipants$ } from "../state/participantVolume";
 import * as controls from "../controls";
 
 export interface MatrixAudioRendererProps {
@@ -32,13 +34,6 @@ export interface MatrixAudioRendererProps {
    * that are not expected to be in the rtc session (local user is excluded).
    */
   validIdentities: string[];
-  /**
-   * The identities of the participants in this room whose playback volume is
-   * boosted above 100%. Audio for these participants must be routed through a
-   * WebAudio gain node, since the volume of a plain HTMLMediaElement is
-   * clamped to 1.
-   */
-  boostedIdentities?: string[];
   /**
    * If set to `true`, mutes all audio tracks rendered by the component.
    * @remarks
@@ -64,7 +59,6 @@ export function LivekitRoomAudioRenderer({
   url,
   livekitRoom,
   validIdentities,
-  boostedIdentities = [],
   muted,
 }: MatrixAudioRendererProps): ReactNode {
   const logger = rootLogger.getChild("[MatrixAudioRenderer]");
@@ -115,11 +109,13 @@ export function LivekitRoomAudioRenderer({
   // shouldUseAudioContext is set to false if stereoPan === 0 to allow standby bluetooth playback.
 
   const { pan: stereoPan, volume: volumeFactor } = useEarpieceAudioConfig();
-  // Any participant in this room with a volume above 100% needs WebAudio
-  // routing: the gain node supports volumes above 1, whereas the volume of a
-  // plain HTMLMediaElement is clamped to 1. When nobody is boosted we keep the
+  // A participant whose volume is above 100% needs WebAudio routing: the gain
+  // node supports volumes above 1, whereas the volume of a plain
+  // HTMLMediaElement is clamped to 1. When nobody is boosted we keep the
   // previous behavior and only use the audio context for the earpiece.
-  const shouldUseAudioContext = boostedIdentities.length > 0 || stereoPan !== 0;
+  const boosted = useBehavior(boostedParticipants$);
+  const anyBoosted = validIdentities.some((id) => boosted.has(id));
+  const shouldUseAudioContext = anyBoosted || stereoPan !== 0;
 
   // initialize the potentially used audio context.
   const [audioContext, setAudioContext] = useState<AudioContext | undefined>(

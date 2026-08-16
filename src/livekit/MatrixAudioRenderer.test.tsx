@@ -23,6 +23,7 @@ import { useTracks } from "@livekit/components-react";
 import { testAudioContext } from "../useAudioContext.test";
 import * as MediaDevicesContext from "../MediaDevicesContext";
 import { LivekitRoomAudioRenderer } from "./MatrixAudioRenderer";
+import { setParticipantBoosted } from "../state/participantVolume";
 import {
   mockMediaDevices,
   mockRemoteParticipant,
@@ -42,11 +43,13 @@ const MediaDevicesProvider = MediaDevicesContext.MediaDevicesContext.Provider;
 
 beforeEach(() => {
   vi.stubGlobal("AudioContext", TestAudioContextConstructor);
+  setParticipantBoosted("@bob:DEV0", false);
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  setParticipantBoosted("@bob:DEV0", false);
 });
 
 vi.mock("@livekit/components-react", async (importOriginal) => {
@@ -83,7 +86,6 @@ function renderTestComponent(
     kind: Track.Kind;
     source: Track.Source;
   }[],
-  boostedIdentities: string[] = [],
 ): RenderResult {
   const liveKitParticipants = livekitParticipantIdentities.map((identity) =>
     mockRemoteParticipant({ identity }),
@@ -118,7 +120,6 @@ function renderTestComponent(
         validIdentities={participants.map((p) => p.identity)}
         livekitRoom={livekitRoom}
         url={""}
-        boostedIdentities={boostedIdentities}
       />
     </MediaDevicesProvider>,
   );
@@ -295,15 +296,11 @@ it("should render a boosted volume through the WebAudio gain node", () => {
     volume: 1,
   });
 
-  // Alice's volume is boosted above 100%, so the audio context must be
+  // Bob's volume is boosted above 100%, so the audio context must be
   // attached so that the boosted volume is applied to the WebAudio gain node
   // rather than being clamped to 1 on the HTMLMediaElement.
-  renderTestComponent(
-    [{ userId: "@bob", deviceId: "DEV0" }],
-    ["@bob:DEV0"],
-    undefined,
-    ["@bob:DEV0"],
-  );
+  setParticipantBoosted("@bob:DEV0", true);
+  renderTestComponent([{ userId: "@bob", deviceId: "DEV0" }], ["@bob:DEV0"]);
   const audioTrack = tracks[0].publication.track! as RemoteAudioTrack;
 
   expect(audioTrack.setAudioContext).toHaveBeenLastCalledWith(testAudioContext);

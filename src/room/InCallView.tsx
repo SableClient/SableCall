@@ -269,7 +269,6 @@ export const InCallView: FC<InCallViewProps> = ({
 
   const ringingVm = useBehavior(vm.ringingVm$);
   const audioParticipants = useBehavior(vm.livekitRoomItems$);
-  const boostedParticipants = useBehavior(vm.boostedParticipants$);
   const participantCount = useBehavior(vm.participantCount$);
   const reconnecting = useBehavior(vm.reconnecting$);
   const layout = useBehavior(vm.layout$);
@@ -629,7 +628,6 @@ export const InCallView: FC<InCallViewProps> = ({
           url={url}
           livekitRoom={livekitRoom}
           validIdentities={participants}
-          boostedIdentities={boostedParticipants[url] ?? []}
           muted={muteAllAudio}
         />
       ))}

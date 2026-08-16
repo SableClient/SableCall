@@ -26,6 +26,7 @@ describe("createVolumeControls", () => {
   function create(options?: {
     initialVolume?: number;
     onVolumeCommitted?: (volume: number) => void;
+    onBoostedChange?: (boosted: boolean) => void;
   }): {
     controls: ReturnType<typeof createVolumeControls>;
     sink: ReturnType<typeof vi.fn>;
@@ -110,17 +111,15 @@ describe("createVolumeControls", () => {
   });
 
   it("reports whether the volume is boosted above the base volume", () => {
-    const { controls } = create();
+    const onBoostedChange = vi.fn();
+    const { controls } = create({ onBoostedChange });
 
-    expect(controls.boosted$.value).toBe(false);
-
-    controls.adjustPlaybackVolume(1);
-    expect(controls.boosted$.value).toBe(false);
+    expect(onBoostedChange).toHaveBeenLastCalledWith(false);
 
     controls.adjustPlaybackVolume(1.01);
-    expect(controls.boosted$.value).toBe(true);
+    expect(onBoostedChange).toHaveBeenLastCalledWith(true);
 
     controls.adjustPlaybackVolume(0.5);
-    expect(controls.boosted$.value).toBe(false);
+    expect(onBoostedChange).toHaveBeenLastCalledWith(false);
   });
 });
