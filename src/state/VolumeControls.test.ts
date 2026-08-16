@@ -7,7 +7,10 @@ Please see LICENSE in the repository root for full details.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createVolumeControls } from "./VolumeControls";
+import {
+  createVolumeControls,
+  MAX_PLAYBACK_VOLUME,
+} from "./VolumeControls";
 import { ObservableScope } from "./ObservableScope";
 import { constant } from "./Behavior";
 
@@ -81,5 +84,43 @@ describe("createVolumeControls", () => {
 
     controls.togglePlaybackMuted();
     expect(controls.playbackVolume$.value).toBe(0.6);
+  });
+
+  it("supports volumes above 100%", () => {
+    const { controls, sink } = create();
+
+    controls.adjustPlaybackVolume(1.5);
+    expect(controls.playbackVolume$.value).toBe(1.5);
+    expect(sink).toHaveBeenLastCalledWith(1.5);
+  });
+
+  it("clamps volumes above the maximum", () => {
+    const { controls, sink } = create();
+
+    controls.adjustPlaybackVolume(2.5);
+    expect(controls.playbackVolume$.value).toBe(MAX_PLAYBACK_VOLUME);
+    expect(sink).toHaveBeenLastCalledWith(MAX_PLAYBACK_VOLUME);
+  });
+
+  it("clamps an out-of-range initial volume", () => {
+    const { controls, sink } = create({ initialVolume: 5 });
+
+    expect(controls.playbackVolume$.value).toBe(MAX_PLAYBACK_VOLUME);
+    expect(sink).toHaveBeenCalledWith(MAX_PLAYBACK_VOLUME);
+  });
+
+  it("reports whether the volume is boosted above the base volume", () => {
+    const { controls } = create();
+
+    expect(controls.boosted$.value).toBe(false);
+
+    controls.adjustPlaybackVolume(1);
+    expect(controls.boosted$.value).toBe(false);
+
+    controls.adjustPlaybackVolume(1.01);
+    expect(controls.boosted$.value).toBe(true);
+
+    controls.adjustPlaybackVolume(0.5);
+    expect(controls.boosted$.value).toBe(false);
   });
 });

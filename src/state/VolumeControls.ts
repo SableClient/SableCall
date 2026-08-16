@@ -20,17 +20,43 @@ import { type ObservableScope } from "./ObservableScope";
 import { accumulate } from "../utils/observable";
 
 /**
+ * The maximum playback volume, as a scalar multiplier of the stream's base
+ * volume. Values above 1 boost the volume past 100%.
+ */
+export const MAX_PLAYBACK_VOLUME = 2;
+
+/**
+ * The default playback volume, as a scalar multiplier of the stream's base
+ * volume.
+ */
+export const DEFAULT_PLAYBACK_VOLUME = 1;
+
+/**
+ * Clamp a playback volume to the supported range [0, MAX_PLAYBACK_VOLUME].
+ */
+export function clampPlaybackVolume(volume: number): number {
+  return Math.max(0, Math.min(MAX_PLAYBACK_VOLUME, volume));
+}
+
+/**
  * Controls for audio playback volume.
  */
 export interface VolumeControls {
   /**
-   * The volume to which the audio is set, as a scalar multiplier.
+   * The volume to which the audio is set, as a scalar multiplier. In the
+   * range [0, MAX_PLAYBACK_VOLUME]; values above 1 boost the volume past
+   * 100%.
    */
   playbackVolume$: Behavior<number>;
   /**
    * Whether playback of this audio is disabled.
    */
   playbackMuted$: Behavior<boolean>;
+  /**
+   * Whether the requested playback volume is above the stream's base volume
+   * (i.e. amplification beyond 100% is requested).
+   */
+  boosted$: Behavior<boolean>;
   togglePlaybackMuted: () => void;
   adjustPlaybackVolume: (value: number) => void;
   commitPlaybackVolume: () => void;
@@ -66,7 +92,7 @@ export function createVolumeControls(
   {
     pretendToBeDisconnected$,
     sink$,
-    initialVolume = 1,
+    initialVolume = DEFAULT_PLAYBACK_VOLUME,
     onVolumeCommitted,
   }: VolumeControlsInputs,
 ): VolumeControls {
@@ -77,7 +103,10 @@ export function createVolumeControls(
   const playbackVolume$ = scope.behavior<number>(
     merge(toggleMuted$, adjustVolume$, commitVolume$).pipe(
       accumulate(
-        { volume: initialVolume, committedVolume: initialVolume },
+        {
+          volume: clampPlaybackVolume(initialVolume),
+          committedVolume: clampPlaybackVolume(initialVolume),
+        },
         (state, event) => {
           switch (event) {
             case "toggle mute":
@@ -95,8 +124,10 @@ export function createVolumeControls(
                   state.volume === 0 ? state.committedVolume : state.volume,
               };
             default:
-              // Volume adjustment
-              return { ...state, volume: event };
+              // Volume adjustment. Clamp so that nothing above the maximum
+              // can slip through (e.g. an out-of-date slider or a stale
+              // saved preference).
+              return { ...state, volume: clampPlaybackVolume(event) };
           }
         },
       ),
@@ -132,6 +163,11 @@ export function createVolumeControls(
     playbackVolume$,
     playbackMuted$: scope.behavior<boolean>(
       playbackVolume$.pipe(map((volume) => volume === 0)),
+    ),
+    // Whether the volume is above the base volume, in which case the audio
+    // needs to be amplified past 100%.
+    boosted$: scope.behavior<boolean>(
+      playbackVolume$.pipe(map((volume) => volume > 1)),
     ),
     togglePlaybackMuted: () => toggleMuted$.next("toggle mute"),
     adjustPlaybackVolume: (value: number) => adjustVolume$.next(value),
