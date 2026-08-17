@@ -29,6 +29,8 @@ import waveSoundOgg from "../sound/reactions/wave.ogg?url";
 import waveSoundMp3 from "../sound/reactions/wave.mp3?url";
 import baduntssSoundOgg from "../sound/reactions/baduntss.ogg?url";
 import baduntssSoundMp3 from "../sound/reactions/baduntss.mp3?url";
+import vineBoomSoundMp3 from "../sound/reactions/vine-boom.mp3?url";
+import vineBoomSoundOgg from "../sound/reactions/vine-boom.ogg?url";
 
 export const ElementCallReactionEventType = "io.element.call.reaction";
 
@@ -200,6 +202,15 @@ export const ReactionSet: ReactionOption[] = [
     sound: {
       ogg: baduntssSoundOgg,
       mp3: baduntssSoundMp3,
+    },
+  },
+    {
+    emoji: "🗿",
+    name: "Moai",
+    alias: ["vine-boom"],
+    sound: {
+      ogg: vineBoomSoundOgg,
+      mp3: vineBoomSoundMp3,
     },
   },
 ];
