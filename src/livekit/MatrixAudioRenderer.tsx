@@ -16,9 +16,11 @@ import {
 } from "@livekit/components-react";
 import { logger as rootLogger } from "matrix-js-sdk/lib/logger";
 
-import { useEarpieceAudioConfig } from "../MediaDevicesContext";
+import { useEarpieceAudioConfig, useMediaDevices } from "../MediaDevicesContext";
 import { useReactiveState } from "../useReactiveState";
 import { useBehavior } from "../useBehavior";
+import { useObservableEagerState } from "observable-hooks";
+import { useUrlParams } from "../UrlParams";
 import { boostedParticipants$ } from "../state/participantVolume";
 import * as controls from "../controls";
 
@@ -117,6 +119,15 @@ export function LivekitRoomAudioRenderer({
   const anyBoosted = validIdentities.some((id) => boosted.has(id));
   const shouldUseAudioContext = anyBoosted || stereoPan !== 0;
 
+  // The selected output device (e.g. NVIDIA Broadcast). When audio is routed
+  // through the WebAudio context for a boosted participant it would otherwise
+  // play out of the context's default device, bypassing the user's chosen
+  // output device and any processing applied there (e.g. noise suppression).
+  const audioOutputId = useObservableEagerState(
+    useMediaDevices().audioOutput.selected$,
+  )?.id;
+  const { controlledAudioDevices } = useUrlParams();
+
   // initialize the potentially used audio context.
   const [audioContext, setAudioContext] = useState<AudioContext | undefined>(
     undefined,
@@ -154,6 +165,23 @@ export function LivekitRoomAudioRenderer({
     }),
     [audioContext],
   );
+
+  // Route the audio context to the selected output device so boosted audio
+  // doesn't bypass it (e.g. NVIDIA Broadcast noise suppression). Mirrors the
+  // sink handling in useAudioContext.tsx.
+  useEffect(() => {
+    if (
+      audioContext &&
+      "setSinkId" in audioContext &&
+      !controlledAudioDevices
+    ) {
+      // https://developer.mozilla.org/en-US/docs/Web/API/AudioContext/setSinkId
+      // @ts-expect-error - setSinkId doesn't exist yet in types, maybe because it's not supported everywhere.
+      audioContext.setSinkId(audioOutputId).catch((ex) => {
+        logger.warn("Unable to change sink for audio context", ex);
+      });
+    }
+  }, [audioContext, audioOutputId, controlledAudioDevices]);
 
   // Simple effects to update the gain and pan node based on the props
   useEffect(() => {

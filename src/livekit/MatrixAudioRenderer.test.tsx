@@ -19,6 +19,7 @@ import {
 } from "livekit-client";
 import { type ReactNode } from "react";
 import { useTracks } from "@livekit/components-react";
+import { MemoryRouter } from "react-router-dom";
 
 import { testAudioContext } from "../useAudioContext.test";
 import * as MediaDevicesContext from "../MediaDevicesContext";
@@ -115,13 +116,15 @@ function renderTestComponent(
 
   vi.mocked(useTracks).mockReturnValue(tracks);
   return render(
-    <MediaDevicesProvider value={mockMediaDevices({})}>
-      <LivekitRoomAudioRenderer
-        validIdentities={participants.map((p) => p.identity)}
-        livekitRoom={livekitRoom}
-        url={""}
-      />
-    </MediaDevicesProvider>,
+    <MemoryRouter>
+      <MediaDevicesProvider value={mockMediaDevices({})}>
+        <LivekitRoomAudioRenderer
+          validIdentities={participants.map((p) => p.identity)}
+          livekitRoom={livekitRoom}
+          url={""}
+        />
+      </MediaDevicesProvider>
+    </MemoryRouter>,
   );
 }
 
