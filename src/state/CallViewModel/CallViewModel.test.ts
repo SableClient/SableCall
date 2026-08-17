@@ -310,11 +310,7 @@ describe.each([
       withCallViewModel(
         {
           remoteParticipants$: constant([aliceParticipant, bobParticipant]),
-          rtcMembers$: constant([
-            localRtcMember,
-            aliceRtcMember,
-            bobRtcMember,
-          ]),
+          rtcMembers$: constant([localRtcMember, aliceRtcMember, bobRtcMember]),
           sharingScreen: new Map([
             [aliceParticipant, constant(true)],
             [bobParticipant, constant(true)],
@@ -347,14 +343,8 @@ describe.each([
       withCallViewModel(
         {
           remoteParticipants$: constant([aliceParticipant, bobParticipant]),
-          rtcMembers$: constant([
-            localRtcMember,
-            aliceRtcMember,
-            bobRtcMember,
-          ]),
-          sharingScreen: new Map([
-            [aliceParticipant, constant(true)],
-          ]),
+          rtcMembers$: constant([localRtcMember, aliceRtcMember, bobRtcMember]),
+          sharingScreen: new Map([[aliceParticipant, constant(true)]]),
         },
         (vm) => {
           schedule("  s g", {
@@ -389,11 +379,7 @@ describe.each([
       withCallViewModel(
         {
           remoteParticipants$: constant([aliceParticipant, bobParticipant]),
-          rtcMembers$: constant([
-            localRtcMember,
-            aliceRtcMember,
-            bobRtcMember,
-          ]),
+          rtcMembers$: constant([localRtcMember, aliceRtcMember, bobRtcMember]),
           sharingScreen: new Map([
             [aliceParticipant, constant(true)],
             [bobParticipant, constant(true)],
@@ -455,11 +441,7 @@ describe.each([
       withCallViewModel(
         {
           remoteParticipants$: constant([aliceParticipant, bobParticipant]),
-          rtcMembers$: constant([
-            localRtcMember,
-            aliceRtcMember,
-            bobRtcMember,
-          ]),
+          rtcMembers$: constant([localRtcMember, aliceRtcMember, bobRtcMember]),
           sharingScreen: new Map([
             [localParticipant, behavior(sharingInputMarbles, yesNo)],
           ]),

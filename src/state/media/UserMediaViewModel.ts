@@ -119,9 +119,7 @@ export function createBaseUserMedia(
       switchMap((p) => {
         if (!p) return of(0);
         return observeTrackAudioLevel$(
-          observeParticipantMedia(p).pipe(
-            map((m) => m.microphoneTrack?.track),
-          ),
+          observeParticipantMedia(p).pipe(map((m) => m.microphoneTrack?.track)),
         );
       }),
     ),

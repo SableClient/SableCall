@@ -131,7 +131,11 @@ export function createVolumeControls(
   // Notify the audio renderer when this stream starts/stops needing a boost.
   if (onBoostedChange !== undefined) {
     playbackVolume$
-      .pipe(map((volume) => volume > 1), distinctUntilChanged(), scope.bind())
+      .pipe(
+        map((volume) => volume > 1),
+        distinctUntilChanged(),
+        scope.bind(),
+      )
       .subscribe(onBoostedChange);
   }
 

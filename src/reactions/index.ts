@@ -204,7 +204,7 @@ export const ReactionSet: ReactionOption[] = [
       mp3: baduntssSoundMp3,
     },
   },
-    {
+  {
     emoji: "🗿",
     name: "Moai",
     alias: ["vine-boom"],

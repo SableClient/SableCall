@@ -957,9 +957,7 @@ export function createCallViewModel$(
               ),
             ),
       ),
-      map((mediaItems) =>
-        mediaItems.filter(([, v]) => v).map(([m]) => m),
-      ),
+      map((mediaItems) => mediaItems.filter(([, v]) => v).map(([m]) => m)),
       distinctUntilChanged(shallowEquals),
     ),
   );

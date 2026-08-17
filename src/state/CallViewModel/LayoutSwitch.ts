@@ -39,7 +39,7 @@ export function createLayoutModeSwitch(
   const naturalGridMode$ = scope.behavior<GridMode>(
     // When the window is flat (as with a phone in landscape orientation),
     // spotlight is a better experience: flipping your phone into landscape is
-    // a quick way of maximising the spotlight tile. 
+    // a quick way of maximising the spotlight tile.
     windowMode$.pipe(
       map((windowMode) => (windowMode === "flat" ? "spotlight" : "grid")),
     ),

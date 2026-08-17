@@ -16,7 +16,10 @@ import {
 } from "@livekit/components-react";
 import { logger as rootLogger } from "matrix-js-sdk/lib/logger";
 
-import { useEarpieceAudioConfig, useMediaDevices } from "../MediaDevicesContext";
+import {
+  useEarpieceAudioConfig,
+  useMediaDevices,
+} from "../MediaDevicesContext";
 import { useReactiveState } from "../useReactiveState";
 import { useBehavior } from "../useBehavior";
 import { useObservableEagerState } from "observable-hooks";

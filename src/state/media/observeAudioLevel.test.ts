@@ -53,8 +53,8 @@ describe("observeTrackAudioLevel$", () => {
 
   test("emits 0 when there is no track", () => {
     const levels: number[] = [];
-    observeTrackAudioLevel$(of(undefined), analyserFactory).subscribe(
-      (level) => levels.push(level),
+    observeTrackAudioLevel$(of(undefined), analyserFactory).subscribe((level) =>
+      levels.push(level),
     );
     expect(levels).toEqual([0]);
     expect(analyserFactory).not.toHaveBeenCalled();
@@ -95,7 +95,9 @@ describe("observeSpeakingFromLevel$", () => {
   let speaking: boolean[];
   let sub: ReturnType<typeof subscribeToSpeaking>;
 
-  function subscribeToSpeaking(options?: Parameters<typeof observeSpeakingFromLevel$>[1]) {
+  function subscribeToSpeaking(
+    options?: Parameters<typeof observeSpeakingFromLevel$>[1],
+  ) {
     speaking = [];
     const s = observeSpeakingFromLevel$(levels, options).subscribe((v) =>
       speaking.push(v),

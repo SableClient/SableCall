@@ -54,7 +54,6 @@ test("allows switching modes manually", () =>
     expectedGridMode: "g-sgs",
   }));
 
-
 test("auto-switches to spotlight when in flat window mode", () =>
   testLayoutSwitch({
     // First normal, then narrow, then flat.

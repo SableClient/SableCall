@@ -7,10 +7,7 @@ Please see LICENSE in the repository root for full details.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  createVolumeControls,
-  MAX_PLAYBACK_VOLUME,
-} from "./VolumeControls";
+import { createVolumeControls, MAX_PLAYBACK_VOLUME } from "./VolumeControls";
 import { ObservableScope } from "./ObservableScope";
 import { constant } from "./Behavior";
 

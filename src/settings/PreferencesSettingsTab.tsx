@@ -31,9 +31,8 @@ export const PreferencesSettingsTab: FC = () => {
     playReactionsSoundSetting,
   );
 
-  const [hideAvatarTilesWhenCameraOff, setHideAvatarTilesWhenCameraOff] = useSetting(
-    hideAvatarTilesWhenCameraOffSetting,
-  );
+  const [hideAvatarTilesWhenCameraOff, setHideAvatarTilesWhenCameraOff] =
+    useSetting(hideAvatarTilesWhenCameraOffSetting);
 
   const onChangeSetting = (
     e: ChangeEvent<HTMLInputElement>,

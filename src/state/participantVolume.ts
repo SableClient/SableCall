@@ -12,14 +12,15 @@ import { BehaviorSubject } from "rxjs";
  * above 100%. Module-level so the audio renderer can react to it without
  * threading state through the view model tree.
  */
-export const boostedParticipants$ = new BehaviorSubject<Set<string>>(
-  new Set(),
-);
+export const boostedParticipants$ = new BehaviorSubject<Set<string>>(new Set());
 
 /**
  * Mark a participant's volume as boosted (above 100%) or not.
  */
-export function setParticipantBoosted(identity: string, boosted: boolean): void {
+export function setParticipantBoosted(
+  identity: string,
+  boosted: boolean,
+): void {
   if (boostedParticipants$.value.has(identity) === boosted) return;
   const next = new Set(boostedParticipants$.value);
   if (boosted) next.add(identity);
