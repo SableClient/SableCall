@@ -29,6 +29,20 @@ export enum ElementWidgetActions {
   HangupCall = "im.vector.hangup",
   Close = "io.element.close",
   ActiveSpeakers = "io.element.active_speakers",
+  // fromWidget: updates the client with the mute state of every call
+  // participant (including the local user), so the host can show per-user
+  // mute indicators for the whole roster. Sent whenever any
+  // participant's media state changes.
+  //
+  // The data of the widget action request is:
+  // {
+  //   participants: Array<{
+  //     userId: string,
+  //     audioEnabled?: boolean,  // microphone enabled
+  //     videoEnabled?: boolean,  // camera enabled
+  //   }>
+  // }
+  ParticipantMediaState = "io.element.participant_media_state",
   // This can be sent as from or to widget
   // fromWidget: updates the client about the current device mute state
   // toWidget: the client requests a specific device mute configuration

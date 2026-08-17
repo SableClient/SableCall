@@ -20,7 +20,7 @@ import {
 import useMeasure from "react-use-measure";
 import { type MatrixRTCSession } from "matrix-js-sdk/lib/matrixrtc";
 import classNames from "classnames";
-import { map } from "rxjs";
+import { combineLatest, map, switchMap } from "rxjs";
 import { useObservable } from "observable-hooks";
 import { logger as rootLogger } from "matrix-js-sdk/lib/logger";
 import { useTranslation } from "react-i18next";
@@ -153,6 +153,43 @@ export const ActiveCall: FC<ActiveCallProps> = (props) => {
           .send(ElementWidgetActions.ActiveSpeakers, { userIds })
           .catch((e) =>
             rootLogger.error("Failed to send active speakers action", e),
+          );
+      });
+
+      // Forward each participant's mute state to the host client so it can
+      // show per-user mute indicators for the whole roster. Rebuild the
+      // payload whenever the roster or any participant's audio/video flips.
+      const mediaState$ = vm.userMedia$.pipe(
+        switchMap((mediaItems) => {
+          const sources = mediaItems.flatMap((media) => [
+            media.audioEnabled$,
+            media.videoEnabled$,
+          ]);
+          return combineLatest(sources).pipe(
+            map(() =>
+              mediaItems.flatMap((media) =>
+                media.userId
+                  ? [
+                      {
+                        userId: media.userId,
+                        audioEnabled: media.audioEnabled$.getValue(),
+                        videoEnabled: media.videoEnabled$.getValue(),
+                      },
+                    ]
+                  : [],
+              ),
+            ),
+          );
+        }),
+      );
+      mediaState$.pipe(scope.bind()).subscribe((participants) => {
+        widgetApi.transport
+          .send(ElementWidgetActions.ParticipantMediaState, { participants })
+          .catch((e) =>
+            rootLogger.error(
+              "Failed to send participant media state action",
+              e,
+            ),
           );
       });
     }
