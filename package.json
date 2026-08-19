@@ -16,6 +16,7 @@
     "build:sdk:development": "pnpm build:sdk --mode development",
     "build:sdk": "pnpm build:full --config vite-sdk.config.js",
     "build:sdk:production": "pnpm build:sdk",
+    "setup:assets": "node scripts/setup-noise-suppression-assets.js",
     "serve": "vite preview",
     "format": "oxfmt",
     "format:check": "oxfmt --check; rc=$?; [[ $rc -ne 0 ]] && printf '\\033[46;30m INFO \\033[0m To fix, run: pnpm format\\n' >&2; exit $rc",
@@ -124,6 +125,7 @@
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-node-polyfills": "^0.28.0",
     "vite-plugin-node-stdlib-browser": "^0.2.1",
+    "vite-plugin-static-copy": "^4.1.1",
     "vite-plugin-svgr": "^4.0.0",
     "vite-plugin-wasm": "^3.6.0",
     "vitest": "^4.1.5",
@@ -132,6 +134,7 @@
   "packageManager": "pnpm@11.6.0+sha512.9a36518224080c6fe5165afdcfe79bfa118c29be703f3f462b1e32efe1e98e47e8750b148e08286250aad4113cc7993ca413c4e2cd447752708c2ee5751bc95f",
   "dependencies": {
     "@jitsi/rnnoise-wasm": "0.2.1",
-    "@phosphor-icons/react": "^2.1.10"
+    "@phosphor-icons/react": "^2.1.10",
+    "deepfilternet3-noise-filter": "^1.3.0"
   }
 }

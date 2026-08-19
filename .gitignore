@@ -7,6 +7,8 @@ dist-ssr
 *.bkp
 .idea/
 public/config.json
+# DeepFilterNet3 WASM/model assets are downloaded by `pnpm setup:assets`
+public/assets/deepfilternet3
 backend/synapse_tmp/*
 backend/synapse_tmp_othersite/*
 /coverage

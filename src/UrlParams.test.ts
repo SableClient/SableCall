@@ -376,6 +376,46 @@ describe("UrlParams", () => {
     });
   });
 
+  describe("deepFilterNetNoiseSuppression", () => {
+    it("is undefined by default", () => {
+      expect(computeUrlParams().deepFilterNetNoiseSuppression).toBeUndefined();
+    });
+
+    it("is parsed as a flag", () => {
+      expect(
+        computeUrlParams("?deepFilterNetNoiseSuppression=true")
+          .deepFilterNetNoiseSuppression,
+      ).toBe(true);
+      expect(
+        computeUrlParams("?deepFilterNetNoiseSuppression=false")
+          .deepFilterNetNoiseSuppression,
+      ).toBe(false);
+    });
+  });
+
+  describe("deepFilterNetNoiseSuppressionLevel", () => {
+    it("is undefined by default", () => {
+      expect(
+        computeUrlParams().deepFilterNetNoiseSuppressionLevel,
+      ).toBeUndefined();
+    });
+
+    it("is parsed and clamped to 0-1", () => {
+      expect(
+        computeUrlParams("?deepFilterNetNoiseSuppressionLevel=0.5")
+          .deepFilterNetNoiseSuppressionLevel,
+      ).toBe(0.5);
+      expect(
+        computeUrlParams("?deepFilterNetNoiseSuppressionLevel=2")
+          .deepFilterNetNoiseSuppressionLevel,
+      ).toBe(1);
+      expect(
+        computeUrlParams("?deepFilterNetNoiseSuppressionLevel=-1")
+          .deepFilterNetNoiseSuppressionLevel,
+      ).toBe(0);
+    });
+  });
+
   describe("echoCancellation", () => {
     it("defaults to true", () => {
       expect(computeUrlParams().echoCancellation).toBe(true);

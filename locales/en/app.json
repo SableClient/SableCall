@@ -217,7 +217,13 @@
       "rnnoise_preset_balanced": "Balanced",
       "rnnoise_preset_conservative": "Conservative",
       "rnnoise_preset_description": "Pick a suppression profile. Stronger modes remove more keyboard noise but can sound more processed.",
-      "rnnoise_preset_strong": "Strong"
+      "rnnoise_preset_strong": "Strong",
+      "deepfilternet_header": "AI noise suppression",
+      "deepfilternet_label": "Enable AI noise suppression (DeepFilterNet)",
+      "deepfilternet_description": "Uses a deep-learning model to remove background noise such as keyboard, traffic, and other non-stationary sounds.",
+      "deepfilternet_not_supported": "(AI noise suppression is not supported by this browser.)",
+      "deepfilternet_level_label": "Noise reduction level",
+      "deepfilternet_level_description": "Higher levels remove more noise but can make your voice sound more processed."
     },
     "auto_gain_control_label": "Automatic gain control",
     "background_blur_header": "Background",

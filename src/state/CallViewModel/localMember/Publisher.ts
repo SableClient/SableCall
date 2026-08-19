@@ -41,9 +41,16 @@ import {
   RNNoiseProcessor,
   supportsRNNoiseProcessor,
 } from "../../../audio/RNNoiseProcessor.ts";
+import {
+  DeepFilterNetProcessor,
+  DEEPFILTERNET_PROCESSOR_NAME,
+  supportsDeepFilterNetProcessor,
+} from "../../../audio/DeepFilterNetProcessor.ts";
 import { shouldEnableNativeNoiseSuppression } from "../../../audio/noiseSuppressionPolicy.ts";
 import {
   autoGainControlSetting,
+  deepFilterNetNoiseSuppression,
+  deepFilterNetNoiseSuppressionLevel,
   echoCancellationSetting,
   micCutoffEnabled,
   micCutoffThresholdDb,
@@ -97,6 +104,8 @@ export class Publisher {
     this.observeTrackProcessors(this.scope, room, trackerProcessorState$);
     this.observeRNNoiseProcessor(this.scope, room, devices);
     this.observeRNNoiseSettingRestart(this.scope, room, devices);
+    this.observeDeepFilterNetProcessor(this.scope, room, devices);
+    this.observeDeepFilterNetSettingRestart(this.scope, room, devices);
     // Observe media device changes and update LiveKit active devices accordingly
     this.observeMediaDevices(this.scope, devices, controlledAudioDevices);
 
@@ -633,7 +642,9 @@ export class Publisher {
           return;
         }
 
-        if (processorActive) {
+        // Stop any existing processor (DeepFilterNet or otherwise) before
+        // attaching RNNoise, since only one processor can be active at a time.
+        if (processor) {
           await microphoneTrack.stopProcessor();
         }
         await microphoneTrack.setProcessor(
@@ -654,6 +665,149 @@ export class Publisher {
           "Disabling microphone cutoff setting after processor setup failure",
         );
         micCutoffEnabled.setValue(false);
+      }
+    }
+  }
+
+  private observeDeepFilterNetProcessor(
+    scope: ObservableScope,
+    room: LivekitRoom,
+    devices: MediaDevices,
+  ): void {
+    const microphoneTrack$ = scope.behavior(
+      observeTrackReference$(
+        room.localParticipant,
+        Track.Source.Microphone,
+      ).pipe(
+        map((trackRef) => {
+          const track = trackRef?.publication.track;
+          return track?.kind === Track.Kind.Audio
+            ? (track as LocalAudioTrack)
+            : null;
+        }),
+      ),
+      null,
+    );
+
+    combineLatest([
+      microphoneTrack$,
+      deepFilterNetNoiseSuppression.value$,
+      deepFilterNetNoiseSuppressionLevel.value$,
+    ])
+      .pipe(
+        scope.bind(),
+        // Changes to the DeepFilterNet enabled setting are deliberately
+        // ignored here; they need a track restart and are handled by
+        // observeDeepFilterNetSettingRestart.
+        distinctUntilChanged(
+          ([aTrack, _aEnabled, aLevel], [bTrack, _bEnabled, bLevel]) => {
+            return aTrack === bTrack && aLevel === bLevel;
+          },
+        ),
+      )
+      .subscribe(([microphoneTrack, dfEnabled, dfLevel]) => {
+        const dfSupported = supportsDeepFilterNetProcessor();
+        if (!microphoneTrack || !dfSupported) {
+          return;
+        }
+
+        this.enqueueRNNoiseOperation(async () => {
+          await this.syncDeepFilterNetProcessor(
+            microphoneTrack,
+            dfEnabled,
+            dfLevel,
+          );
+        });
+      });
+  }
+
+  private observeDeepFilterNetSettingRestart(
+    scope: ObservableScope,
+    room: LivekitRoom,
+    devices: MediaDevices,
+  ): void {
+    deepFilterNetNoiseSuppression.value$
+      .pipe(scope.bind(), distinctUntilChanged(), skip(1))
+      .subscribe((dfEnabled) => {
+        const audioTrack = room.localParticipant.getTrackPublication(
+          Track.Source.Microphone,
+        )?.audioTrack;
+        if (!audioTrack) return;
+
+        const dfSupported = supportsDeepFilterNetProcessor();
+        this.enqueueRNNoiseOperation(async () => {
+          await this.restartMicrophoneTrackForDeepFilterNetPolicy(
+            audioTrack,
+            devices,
+            dfEnabled,
+          );
+          await this.syncDeepFilterNetProcessor(
+            audioTrack,
+            dfEnabled && dfSupported,
+            deepFilterNetNoiseSuppressionLevel.getValue(),
+          );
+        });
+      });
+  }
+
+  private async restartMicrophoneTrackForDeepFilterNetPolicy(
+    audioTrack: LocalAudioTrack,
+    devices: MediaDevices,
+    dfEnabled: boolean,
+  ): Promise<void> {
+    const activeProcessor = audioTrack.getProcessor();
+    if (activeProcessor?.name === DEEPFILTERNET_PROCESSOR_NAME) {
+      await audioTrack.stopProcessor();
+    }
+
+    await audioTrack.restartTrack({
+      deviceId: devices.audioInput.selected$.value?.id,
+      autoGainControl: autoGainControlSetting.getValue(),
+      echoCancellation: echoCancellationSetting.getValue(),
+      noiseSuppression: shouldEnableNativeNoiseSuppression({
+        urlNoiseSuppression: noiseSuppressionSetting.getValue(),
+        rnnoiseEnabled: dfEnabled,
+        rnnoiseSupported: supportsDeepFilterNetProcessor(),
+      }),
+    });
+  }
+
+  private async syncDeepFilterNetProcessor(
+    microphoneTrack: LocalAudioTrack,
+    dfEnabled: boolean,
+    dfLevel: number,
+  ): Promise<void> {
+    try {
+      const processor = microphoneTrack.getProcessor();
+      const processorActive = processor?.name === DEEPFILTERNET_PROCESSOR_NAME;
+      const dfProcessor =
+        processor instanceof DeepFilterNetProcessor ? processor : undefined;
+
+      if (dfEnabled) {
+        if (dfProcessor) {
+          dfProcessor.setSuppressionLevel(dfLevel);
+          await dfProcessor.setEnabled(true);
+          return;
+        }
+
+        // Stop any existing processor (RNNoise or otherwise) before attaching
+        // DeepFilterNet, since only one processor can be active at a time.
+        if (processor) {
+          await microphoneTrack.stopProcessor();
+        }
+        await microphoneTrack.setProcessor(
+          new DeepFilterNetProcessor(dfLevel, true),
+        );
+      } else if (processorActive) {
+        await microphoneTrack.stopProcessor();
+      }
+    } catch (e) {
+      this.logger.error("Failed to apply DeepFilterNet audio processor", e);
+      if (dfEnabled && deepFilterNetNoiseSuppression.getValue()) {
+        this.logger.warn(
+          "Disabling DeepFilterNet setting after processor setup failure",
+        );
+        deepFilterNetNoiseSuppression.setValue(false);
       }
     }
   }

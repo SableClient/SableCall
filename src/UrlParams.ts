@@ -255,6 +255,16 @@ export interface UrlConfiguration {
    * Defaults to true.
    */
   noiseSuppression?: boolean;
+  /**
+   * Whether to enable DeepFilterNet-based noise suppression.
+   * Overrides the user setting when provided.
+   */
+  deepFilterNetNoiseSuppression?: boolean;
+  /**
+   * The DeepFilterNet noise reduction level (0-1).
+   * Overrides the user setting when provided.
+   */
+  deepFilterNetNoiseSuppressionLevel?: number;
 
   callIntent?: RTCCallIntent;
 }
@@ -505,6 +515,15 @@ export const computeUrlParams = (search = "", hash = ""): UrlParams => {
     autoLeaveWhenOthersLeft: parser.getFlag("autoLeave"),
     noiseSuppression: parser.getFlagParam("noiseSuppression", true),
     echoCancellation: parser.getFlagParam("echoCancellation", true),
+    deepFilterNetNoiseSuppression: parser.getFlag(
+      "deepFilterNetNoiseSuppression",
+    ),
+    deepFilterNetNoiseSuppressionLevel: ((): number | undefined => {
+      const val = parseFloat(
+        parser.getParam("deepFilterNetNoiseSuppressionLevel") ?? "",
+      );
+      return Number.isFinite(val) ? Math.max(0, Math.min(1, val)) : undefined;
+    })(),
   };
 
   // Log the final configuration for debugging purposes.

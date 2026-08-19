@@ -117,6 +117,16 @@ export default ({
         key: fs.readFileSync("./backend/dev_tls_m.localhost.key"),
         cert: fs.readFileSync("./backend/dev_tls_m.localhost.crt"),
       },
+      proxy: {
+        // Proxy for DeepFilterNet3 assets to avoid CORS issues during
+        // development when the assets have not been downloaded locally.
+        "/assets/deepfilternet3": {
+          target:
+            "https://cdn.mezon.ai/AI/models/datas/noise_suppression/deepfilternet3",
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/assets\/deepfilternet3/, ""),
+        },
+      },
     },
     worker: {
       format: "es",

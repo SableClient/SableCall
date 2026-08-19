@@ -7,6 +7,7 @@ Please see LICENSE in the repository root for full details.
 
 import { defineConfig, mergeConfig } from "vite";
 import generateFile from "vite-plugin-generate-file";
+import { viteStaticCopy } from "vite-plugin-static-copy";
 
 import fullConfig from "./vite.config";
 
@@ -33,6 +34,21 @@ export default defineConfig((env) =>
             },
           },
         ]),
+        // The embedded build disables publicDir, so the DeepFilterNet WASM
+        // binary and ONNX model (downloaded by `pnpm setup:assets`) would
+        // otherwise be omitted from the build output. Copy them explicitly so
+        // they are served from /assets/deepfilternet3/ at runtime.
+        viteStaticCopy({
+          targets: [
+            {
+              src: "public/assets/deepfilternet3/**/*",
+              dest: "assets/deepfilternet3",
+              // Strip the `public/assets/deepfilternet3` prefix (3 segments)
+              // so files land at dist/assets/deepfilternet3/v3/...
+              rename: { stripBase: 3 },
+            },
+          ],
+        }),
       ],
     }),
   ),

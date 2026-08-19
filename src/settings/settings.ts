@@ -128,6 +128,23 @@ export const rnnoiseNoiseSuppressionPreset =
     "conservative",
   );
 
+/**
+ * Whether DeepFilterNet-based noise suppression is enabled.
+ * Defaults to off; when enabled it takes precedence over RNNoise.
+ */
+export const deepFilterNetNoiseSuppression = new Setting<boolean>(
+  "deepfilternet-noise-suppression",
+  false,
+);
+
+/**
+ * The DeepFilterNet noise reduction level (0-1).
+ */
+export const deepFilterNetNoiseSuppressionLevel = new Setting<number>(
+  "deepfilternet-noise-suppression-level",
+  0.75,
+);
+
 export const micCutoffEnabled = new Setting<boolean>(
   "mic-cutoff-enabled",
   false,

@@ -58,6 +58,8 @@ import {
   rnnoiseNoiseSuppressionPreset as rnnoiseNoiseSuppressionPresetSetting,
   micCutoffEnabled as micCutoffEnabledSetting,
   micCutoffThresholdDb as micCutoffThresholdDbSetting,
+  deepFilterNetNoiseSuppression as deepFilterNetNoiseSuppressionSetting,
+  deepFilterNetNoiseSuppressionLevel as deepFilterNetNoiseSuppressionLevelSetting,
 } from "./settings";
 import { PreferencesSettingsTab } from "./PreferencesSettingsTab";
 import { Slider } from "../Slider";
@@ -72,6 +74,7 @@ import {
   microphoneInputLevelDb$,
   supportsRNNoiseProcessor,
 } from "../audio/RNNoiseProcessor";
+import { supportsDeepFilterNetProcessor } from "../audio/DeepFilterNetProcessor";
 import {
   type RNNoiseSuppressionPreset,
   rnnoiseSuppressionPresets,
@@ -326,6 +329,65 @@ export const SettingsModal: FC<Props> = ({
     );
   };
 
+  const DeepFilterNetCheckbox: React.FC = (): ReactNode => {
+    const supported = supportsDeepFilterNetProcessor();
+    const [dfEnabled, setDfEnabled] = useSetting(
+      deepFilterNetNoiseSuppressionSetting,
+    );
+    const [dfLevel, setDfLevel] = useSetting(
+      deepFilterNetNoiseSuppressionLevelSetting,
+    );
+    const [dfLevelRaw, setDfLevelRaw] = useState(dfLevel);
+    const effectiveDfEnabled = supported && !!dfEnabled;
+
+    useEffect(() => {
+      setDfLevelRaw(dfLevel);
+    }, [dfLevel]);
+
+    return (
+      <>
+        <h4>{t("settings.audio_tab.deepfilternet_header")}</h4>
+        <FieldRow>
+          <InputField
+            id="activateDeepFilterNetSuppression"
+            label={t("settings.audio_tab.deepfilternet_label")}
+            description={
+              supported
+                ? t("settings.audio_tab.deepfilternet_description")
+                : t("settings.audio_tab.deepfilternet_not_supported")
+            }
+            type="checkbox"
+            checked={effectiveDfEnabled}
+            onChange={(e): void => setDfEnabled(e.target.checked)}
+            disabled={!supported}
+          />
+        </FieldRow>
+        {effectiveDfEnabled && (
+          <div className={styles.volumeSlider}>
+            <label>
+              {t("settings.audio_tab.deepfilternet_level_label")}
+              {": "}
+              <span className={styles.settingValue}>
+                {Math.round(dfLevelRaw * 100)}%
+              </span>
+            </label>
+            <p>{t("settings.audio_tab.deepfilternet_level_description")}</p>
+            <Slider
+              label={t("settings.audio_tab.deepfilternet_level_label")}
+              value={dfLevelRaw}
+              onValueChange={setDfLevelRaw}
+              onValueCommit={setDfLevel}
+              min={0}
+              max={1}
+              step={0.05}
+              tooltipFormatter={(v): string => `${Math.round(v * 100)}%`}
+            />
+          </div>
+        )}
+      </>
+    );
+  };
+
   const MicrophoneCutoffSettings: React.FC = (): ReactNode => {
     const supported = supportsRNNoiseProcessor();
     const [cutoffEnabled, setCutoffEnabled] = useSetting(
@@ -555,6 +617,8 @@ export const SettingsModal: FC<Props> = ({
           </div>
           <Separator />
           <RNNoiseCheckbox />
+          <Separator />
+          <DeepFilterNetCheckbox />
           <Separator />
           <MicrophoneCutoffSettings />
         </Form>
