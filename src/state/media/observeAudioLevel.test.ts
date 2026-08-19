@@ -166,7 +166,7 @@ describe("observeSpeakingFromLevel$", () => {
 
   test("hysteresis: requires higher level to start than to keep speaking", async () => {
     sub = subscribeToSpeaking({
-      threshold$: of(0.05),
+      threshold: 0.05,
       holdThreshold: 0.02,
       confirmMs: 300,
       dropOffMs: 1000,
