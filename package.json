@@ -10,7 +10,7 @@
     "build:full": "vite build",
     "build:full:production": "pnpm build:full",
     "build:full:development": "pnpm build:full --mode development",
-    "build:embedded": "pnpm build:full --config vite-embedded.config.ts",
+    "build:embedded": "pnpm setup:assets && pnpm build:full --config vite-embedded.config.ts",
     "build:embedded:production": "pnpm build:embedded",
     "build:embedded:development": "pnpm build:embedded --mode development",
     "build:sdk:development": "pnpm build:sdk --mode development",
