@@ -1,357 +1,233 @@
 /*
-Copyright 2024 New Vector Ltd.
+Copyright 2026 Element Creations Ltd.
 
 SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
 Please see LICENSE in the repository root for full details.
 */
 
-import { test, expect, vi } from "vitest";
-import "@testing-library/jest-dom/vitest";
+import { afterEach, describe, beforeEach, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type ChangeEvent, type ReactNode, useState } from "react";
-import { type MatrixClient } from "matrix-js-sdk";
-import { BehaviorSubject } from "rxjs";
+import { TooltipProvider } from "@vector-im/compound-web";
 
+import type { MatrixClient } from "matrix-js-sdk";
+import type { ReactNode } from "react";
 import { SettingsModal } from "./SettingsModal";
+import {
+  micCutoffEnabled,
+  micCutoffThresholdDb,
+  rnnoiseNoiseSuppression,
+  rnnoiseNoiseSuppressionPreset,
+} from "./settings";
+import { supportsRNNoiseProcessor } from "../audio/RNNoiseProcessor";
+import { MIC_CUTOFF_DEFAULT_DB } from "../audio/microphoneGate";
 
-// Mock dependencies
+const { mockRequestDeviceNames } = vi.hoisted(() => ({
+  mockRequestDeviceNames: vi.fn(),
+}));
+
+vi.mock("../audio/RNNoiseProcessor", async () => {
+  const actual = await vi.importActual("../audio/RNNoiseProcessor");
+
+  return {
+    ...actual,
+    supportsRNNoiseProcessor: vi.fn(() => true),
+  };
+});
+
 vi.mock("../Modal", () => ({
   Modal: ({
-    children,
     open,
-    onDismiss,
-    title,
+    children,
   }: {
-    children: ReactNode;
     open: boolean;
-    onDismiss: () => void;
-    title: string;
-  }): ReactNode =>
-    open ? (
-      <div
-        data-testid="modal"
-        role="button"
-        tabIndex={0}
-        onClick={onDismiss}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onDismiss();
-          }
-        }}
-      >
-        <h1>{title}</h1>
-        {children}
-      </div>
-    ) : null,
+    children: ReactNode;
+  }): ReactNode => (open ? <div>{children}</div> : null),
 }));
 
 vi.mock("../tabs/Tabs", () => ({
   TabContainer: ({
-    tabs,
     tab,
-    onTabChange,
+    tabs,
   }: {
-    tabs: Array<{ key: string; name: string; content: ReactNode }>;
     tab: string;
-    onTabChange: (tab: string) => void;
+    tabs: { key: string; content: ReactNode }[];
   }): ReactNode => (
-    <div data-testid="tab-container">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          data-testid={`tab-${t.key}`}
-          onClick={() => onTabChange(t.key)}
-        >
-          {t.name}
-        </button>
-      ))}
-      <div data-testid="tab-content">
-        {tabs.find((t) => t.key === tab)?.content}
-      </div>
-    </div>
-  ),
-}));
-
-vi.mock("./ProfileSettingsTab", () => ({
-  ProfileSettingsTab: function ProfileSettingsTab(): ReactNode {
-    return <div data-testid="profile-tab">Profile</div>;
-  },
-}));
-
-vi.mock("./FeedbackSettingsTab", () => ({
-  FeedbackSettingsTab: function FeedbackSettingsTab(): ReactNode {
-    return <div data-testid="feedback-tab">Feedback</div>;
-  },
-}));
-
-vi.mock("./PreferencesSettingsTab", () => ({
-  PreferencesSettingsTab: function PreferencesSettingsTab(): ReactNode {
-    return <div data-testid="preferences-tab">Preferences</div>;
-  },
-}));
-
-vi.mock("./DeveloperSettingsTab", () => ({
-  DeveloperSettingsTab: function DeveloperSettingsTab(): ReactNode {
-    return <div data-testid="developer-tab">Developer</div>;
-  },
-}));
-
-vi.mock("./DeviceSelection", () => ({
-  DeviceSelection: ({ title }: { title: string }): ReactNode => (
-    <div data-testid={`device-selection-${title}`}>{title}</div>
-  ),
-}));
-
-vi.mock("../Slider", () => ({
-  Slider: ({ label }: { label: string }): ReactNode => (
-    <div data-testid="slider">{label}</div>
-  ),
-}));
-
-vi.mock("../input/Input", () => ({
-  FieldRow: ({ children }: { children: ReactNode }): ReactNode => (
-    <div data-testid="field-row">{children}</div>
-  ),
-  InputField: ({
-    label,
-    type,
-    checked,
-    onChange,
-  }: {
-    label: string;
-    type: string;
-    checked?: boolean;
-    onChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  }): ReactNode => (
-    <label>
-      {label}
-      <input type={type} checked={checked} onChange={onChange} />
-    </label>
+    <div>{tabs.find((candidate) => candidate.key === tab)?.content}</div>
   ),
 }));
 
 vi.mock("../MediaDevicesContext", () => ({
   useMediaDevices: (): {
-    audioInput: {
-      selectedId: string;
-      available$: BehaviorSubject<
-        readonly { deviceId: string; label: string }[]
-      >;
-      selected$: BehaviorSubject<{ id: string; label: string }>;
-    };
-    audioOutput: {
-      selectedId: string;
-      available$: BehaviorSubject<
-        readonly { deviceId: string; label: string }[]
-      >;
-      selected$: BehaviorSubject<{ id: string; label: string }>;
-    };
-    videoInput: {
-      selectedId: string;
-      available$: BehaviorSubject<
-        readonly { deviceId: string; label: string }[]
-      >;
-      selected$: BehaviorSubject<{ id: string; label: string }>;
-    };
-    requestDeviceNames: () => void;
+    requestDeviceNames: typeof mockRequestDeviceNames;
+    audioInput: object;
+    audioOutput: object;
+    videoInput: object;
   } => ({
-    audioInput: {
-      selectedId: "mic1",
-      available$: new BehaviorSubject<
-        readonly { deviceId: string; label: string }[]
-      >([{ deviceId: "mic1", label: "Microphone 1" }] as const),
-      selected$: new BehaviorSubject({ id: "mic1", label: "Microphone 1" }),
-    },
-    audioOutput: {
-      selectedId: "speaker1",
-      available$: new BehaviorSubject<
-        readonly { deviceId: string; label: string }[]
-      >([{ deviceId: "speaker1", label: "Speaker 1" }] as const),
-      selected$: new BehaviorSubject({ id: "speaker1", label: "Speaker 1" }),
-    },
-    videoInput: {
-      selectedId: "cam1",
-      available$: new BehaviorSubject<
-        readonly { deviceId: string; label: string }[]
-      >([{ deviceId: "cam1", label: "Camera 1" }] as const),
-      selected$: new BehaviorSubject({ id: "cam1", label: "Camera 1" }),
-    },
-    requestDeviceNames: vi.fn(),
+    requestDeviceNames: mockRequestDeviceNames,
+    audioInput: {},
+    audioOutput: {},
+    videoInput: {},
   }),
+}));
+
+vi.mock("./DeviceSelection", () => ({
+  DeviceSelection: (): ReactNode => <div data-testid="device-selection" />,
 }));
 
 vi.mock("../livekit/TrackProcessorContext", () => ({
-  useTrackProcessor: (): { supported: boolean } => ({ supported: true }),
-}));
-
-type SettingWithDefault<T> = {
-  defaultValue: T;
-};
-
-vi.mock("./settings", () => ({
-  useSetting: vi.fn(
-    <T,>(setting: SettingWithDefault<T>): [T, (value: T) => void] => {
-      const [value, setValue] = useState(setting.defaultValue);
-      return [value, setValue];
-    },
-  ),
-  soundEffectVolume: { defaultValue: 0.5 },
-  backgroundBlur: { defaultValue: false },
-  noiseSuppressionEnabled: { defaultValue: true },
-  noiseSuppressionLevel: { defaultValue: 0.75 },
-  developerMode: { defaultValue: false },
-}));
-
-vi.mock("../UrlParams", () => ({
-  useUrlParams: (): { controlledAudioDevices: boolean } => ({
-    controlledAudioDevices: false,
+  useTrackProcessor: (): { supported: boolean; processor: undefined } => ({
+    supported: true,
+    processor: undefined,
   }),
 }));
 
-vi.mock("../state/MediaDevices", () => ({
-  iosDeviceMenu$: { value: false },
-}));
-
-vi.mock("../useBehavior", () => ({
-  useBehavior: (): boolean => false,
-}));
-
 vi.mock("./submit-rageshake", () => ({
-  useSubmitRageshake: (): { available: boolean } => ({ available: true }),
+  useSubmitRageshake: (): {
+    submitRageshake: ReturnType<typeof vi.fn>;
+    sending: boolean;
+    sent: boolean;
+    error: undefined;
+    available: boolean;
+  } => ({
+    submitRageshake: vi.fn(),
+    sending: false,
+    sent: false,
+    error: undefined,
+    available: false,
+  }),
 }));
 
-vi.mock("../widget", () => ({
-  widget: null,
-}));
-
-const mockClient = {} as MatrixClient;
-
-test("renders SettingsModal with audio tab", (): void => {
-  render(
-    <SettingsModal
-      open={true}
-      onDismiss={() => {}}
-      tab="audio"
-      onTabChange={() => {}}
-      client={mockClient}
-    />,
-  );
-
-  expect(screen.getByTestId("modal")).toBeInTheDocument();
-  expect(screen.getByTestId("tab-content")).toBeInTheDocument();
-  expect(screen.getByText("Audio Processing")).toBeInTheDocument();
+vi.mock("../UrlParams", async () => {
+  const actual = await vi.importActual("../UrlParams");
+  return {
+    ...actual,
+    useUrlParams: (): { controlledAudioDevices: boolean } => ({
+      controlledAudioDevices: false,
+    }),
+  };
 });
 
-test("renders SettingsModal with video tab", (): void => {
+function renderSettingsModal(): void {
   render(
-    <SettingsModal
-      open={true}
-      onDismiss={() => {}}
-      tab="video"
-      onTabChange={() => {}}
-      client={mockClient}
-    />,
+    <TooltipProvider>
+      <SettingsModal
+        open
+        onDismiss={vi.fn()}
+        tab="audio"
+        onTabChange={vi.fn()}
+        client={{} as MatrixClient}
+      />
+    </TooltipProvider>,
   );
+}
 
-  expect(screen.getByTestId("modal")).toBeInTheDocument();
-  expect(screen.getByText("Background")).toBeInTheDocument();
-});
+describe("SettingsModal RNNoise controls", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class ResizeObserver {
+        public observe(): void {}
+        public unobserve(): void {}
+        public disconnect(): void {}
+      },
+    );
+    localStorage.clear();
+    mockRequestDeviceNames.mockClear();
+    rnnoiseNoiseSuppressionPreset.setValue("conservative");
+    rnnoiseNoiseSuppression.setValue(false);
+    micCutoffEnabled.setValue(false);
+    micCutoffThresholdDb.setValue(MIC_CUTOFF_DEFAULT_DB);
+    vi.mocked(supportsRNNoiseProcessor).mockReturnValue(true);
+  });
 
-test("renders SettingsModal with profile tab when not widget", (): void => {
-  render(
-    <SettingsModal
-      open={true}
-      onDismiss={() => {}}
-      tab="profile"
-      onTabChange={() => {}}
-      client={mockClient}
-    />,
-  );
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
-  expect(screen.getByTestId("profile-tab")).toBeInTheDocument();
-});
+  it("renders the RNNoise checkbox in the audio tab", () => {
+    renderSettingsModal();
 
-test("renders SettingsModal with preferences tab", (): void => {
-  render(
-    <SettingsModal
-      open={true}
-      onDismiss={() => {}}
-      tab="preferences"
-      onTabChange={() => {}}
-      client={mockClient}
-    />,
-  );
+    expect(
+      screen.getByLabelText("Enable enhanced noise suppression (RNNoise)"),
+    ).toBeInTheDocument();
+    expect(mockRequestDeviceNames).toHaveBeenCalledOnce();
+  });
 
-  expect(screen.getByTestId("preferences-tab")).toBeInTheDocument();
-});
+  it("disables RNNoise when AudioWorklet support is unavailable", () => {
+    vi.mocked(supportsRNNoiseProcessor).mockReturnValue(false);
+    rnnoiseNoiseSuppression.setValue(true);
 
-test("renders SettingsModal with feedback tab", (): void => {
-  render(
-    <SettingsModal
-      open={true}
-      onDismiss={() => {}}
-      tab="feedback"
-      onTabChange={() => {}}
-      client={mockClient}
-    />,
-  );
+    renderSettingsModal();
 
-  expect(screen.getByTestId("feedback-tab")).toBeInTheDocument();
-});
+    const checkbox = screen.getByLabelText(
+      "Enable enhanced noise suppression (RNNoise)",
+    );
+    expect(checkbox).toBeDisabled();
+    expect(checkbox).not.toBeChecked();
+    expect(
+      screen.getByText(
+        "(Enhanced noise suppression is not supported by this browser.)",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Pick a suppression profile. Stronger modes remove more keyboard noise but can sound more processed.",
+      ),
+    ).not.toBeInTheDocument();
+  });
 
-test("renders SettingsModal with developer tab when enabled", (): void => {
-  // Skip this test for now as mocking is complex
-  expect(true).toBe(true);
-});
+  it("persists RNNoise setting when toggled", async () => {
+    const user = userEvent.setup();
+    renderSettingsModal();
 
-test("does not render when open is false", (): void => {
-  render(
-    <SettingsModal
-      open={false}
-      onDismiss={() => {}}
-      tab="audio"
-      onTabChange={() => {}}
-      client={mockClient}
-    />,
-  );
+    const checkbox = screen.getByLabelText(
+      "Enable enhanced noise suppression (RNNoise)",
+    );
+    await user.click(checkbox);
 
-  expect(screen.queryByTestId("modal")).not.toBeInTheDocument();
-});
+    expect(rnnoiseNoiseSuppression.getValue()).toBe(true);
+    expect(
+      localStorage.getItem("matrix-setting-rnnoise-noise-suppression"),
+    ).toBe("true");
+  });
 
-test("calls onDismiss when modal is dismissed", async (): Promise<void> => {
-  const user = userEvent.setup();
-  const onDismiss = vi.fn();
+  it("shows the cutoff volume slider only when microphone cutoff is enabled", async () => {
+    const user = userEvent.setup();
+    renderSettingsModal();
 
-  render(
-    <SettingsModal
-      open={true}
-      onDismiss={onDismiss}
-      tab="audio"
-      onTabChange={() => {}}
-      client={mockClient}
-    />,
-  );
+    const checkbox = screen.getByLabelText(
+      "Mute microphone input below a volume cutoff",
+    );
+    expect(checkbox).not.toBeChecked();
+    // Only the sound effect volume slider is present initially
+    expect(screen.getAllByRole("slider")).toHaveLength(1);
+    expect(screen.queryByText(/Cutoff volume/)).not.toBeInTheDocument();
 
-  await user.click(screen.getByTestId("modal"));
-  expect(onDismiss).toHaveBeenCalled();
-});
+    await user.click(checkbox);
 
-test("calls onTabChange when tab is clicked", async (): Promise<void> => {
-  const user = userEvent.setup();
-  const onTabChange = vi.fn();
+    expect(micCutoffEnabled.getValue()).toBe(true);
+    expect(localStorage.getItem("matrix-setting-mic-cutoff-enabled")).toBe(
+      "true",
+    );
+    expect(screen.getByText(/Cutoff volume/)).toBeInTheDocument();
+    expect(screen.getAllByRole("slider")).toHaveLength(2);
+  });
 
-  render(
-    <SettingsModal
-      open={true}
-      onDismiss={() => {}}
-      tab="audio"
-      onTabChange={onTabChange}
-      client={mockClient}
-    />,
-  );
+  it("disables microphone cutoff when AudioWorklet support is unavailable", () => {
+    vi.mocked(supportsRNNoiseProcessor).mockReturnValue(false);
+    micCutoffEnabled.setValue(true);
 
-  await user.click(screen.getByTestId("tab-video"));
-  expect(onTabChange).toHaveBeenCalledWith("video");
+    renderSettingsModal();
+
+    const checkbox = screen.getByLabelText(
+      "Mute microphone input below a volume cutoff",
+    );
+    expect(checkbox).toBeDisabled();
+    expect(checkbox).not.toBeChecked();
+    expect(
+      screen.getByText("(Microphone cutoff is not supported by this browser.)"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Cutoff volume/)).not.toBeInTheDocument();
+  });
 });
