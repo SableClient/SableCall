@@ -184,7 +184,7 @@ export function LivekitRoomAudioRenderer({
         logger.warn("Unable to change sink for audio context", ex);
       });
     }
-  }, [audioContext, audioOutputId, controlledAudioDevices]);
+  }, [audioContext, audioOutputId, controlledAudioDevices, logger]);
 
   // Simple effects to update the gain and pan node based on the props
   useEffect(() => {
