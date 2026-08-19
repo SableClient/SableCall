@@ -101,13 +101,26 @@ function downloadFile(fileUrl, filePath, isOptional = false) {
           return;
         }
 
+        const expectedSize = Number(response.headers["content-length"]);
         const fileStream = fs.createWriteStream(filePath);
 
         response.pipe(fileStream);
 
         fileStream.on("finish", () => {
           fileStream.close();
-          const sizeMB = (fs.statSync(filePath).size / 1024 / 1024).toFixed(2);
+          const actualSize = fs.statSync(filePath).size;
+          // Guard against truncated downloads: if the server told us the
+          // expected size and we received fewer bytes, the file is corrupt.
+          if (Number.isFinite(expectedSize) && expectedSize > 0 && actualSize !== expectedSize) {
+            fs.unlinkSync(filePath);
+            reject(
+              new Error(
+                `Download incomplete for ${fileName}: expected ${expectedSize} bytes, got ${actualSize}`,
+              ),
+            );
+            return;
+          }
+          const sizeMB = (actualSize / 1024 / 1024).toFixed(2);
           console.log(`✓ Downloaded: ${fileName} (${sizeMB} MB)`);
           resolve();
         });
