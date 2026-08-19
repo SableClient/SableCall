@@ -10,7 +10,7 @@ import "@formatjs/intl-segmenter/polyfill";
 import i18n from "i18next";
 import posthog from "posthog-js";
 import { initReactI18next } from "react-i18next";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import "vitest-axe/extend-expect";
 import { logger } from "matrix-js-sdk/lib/logger";
@@ -18,6 +18,21 @@ import "@testing-library/jest-dom/vitest";
 
 import EN from "../locales/en/app.json";
 import { Config } from "./config/Config";
+
+// Mock localStorage for tests
+const storage = new Map<string, string>();
+const localStorageMock = {
+  getItem: vi.fn((key: string) => storage.get(key) || null),
+  setItem: vi.fn((key: string, value: string) => storage.set(key, value)),
+  removeItem: vi.fn((key: string) => storage.delete(key)),
+  clear: vi.fn(() => storage.clear()),
+};
+
+Object.defineProperty(globalThis, "localStorage", {
+  value: localStorageMock,
+  configurable: true,
+  writable: true,
+});
 
 // Bare-minimum i18n config
 i18n
