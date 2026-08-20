@@ -29,6 +29,10 @@ import {
   type MemberMediaInputs,
   type BaseMemberMediaViewModel,
 } from "./MemberMediaViewModel";
+import {
+  observeSpeakingFromLevel$,
+  observeTrackAudioLevel$,
+} from "./observeAudioLevel";
 import { type RemoteUserMediaViewModel } from "./RemoteUserMediaViewModel";
 import { type ObservableScope } from "../ObservableScope";
 import { showConnectionStats } from "../../settings/settings";
@@ -45,6 +49,8 @@ export type UserMediaViewModel =
 export interface BaseUserMediaViewModel extends BaseMemberMediaViewModel {
   type: "user";
   speaking$: Behavior<boolean>;
+  audioLevel$: Behavior<number>;
+  voiceActivity$: Behavior<boolean>;
   audioEnabled$: Behavior<boolean>;
   videoEnabled$: Behavior<boolean>;
   videoFit$: Behavior<"cover" | "contain">;
@@ -106,6 +112,19 @@ export function createBaseUserMedia(
   >(undefined);
 
   const videoSize$ = videoSizeFromParticipant$(participant$);
+
+  // Client-side voice activity detection using the audio track itself
+  const audioLevel$ = scope.behavior(
+    participant$.pipe(
+      switchMap((p) => {
+        if (!p) return of(0);
+        return observeTrackAudioLevel$(
+          observeParticipantMedia(p).pipe(map((m) => m.microphoneTrack?.track)),
+        );
+      }),
+    ),
+  );
+
   return {
     ...createMemberMedia(scope, {
       ...inputs,
@@ -125,6 +144,8 @@ export function createBaseUserMedia(
         ),
       ),
     ),
+    audioLevel$,
+    voiceActivity$: scope.behavior(observeSpeakingFromLevel$(audioLevel$)),
     audioEnabled$: scope.behavior(
       media$.pipe(map((m) => m?.microphoneTrack?.isMuted === false)),
     ),

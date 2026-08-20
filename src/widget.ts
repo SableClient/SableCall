@@ -28,6 +28,7 @@ export enum ElementWidgetActions {
   JoinCall = "io.element.join",
   HangupCall = "im.vector.hangup",
   Close = "io.element.close",
+  ActiveSpeakers = "io.element.active_speakers",
   // This can be sent as from or to widget
   // fromWidget: updates the client about the current device mute state
   // toWidget: the client requests a specific device mute configuration

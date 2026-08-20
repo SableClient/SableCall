@@ -84,6 +84,8 @@ interface MatrixRTCSdk {
       connection: Connection | null;
       membership: CallMembership;
       participant: LocalParticipant | RemoteParticipant | null;
+      speaking: boolean;
+      audioLevel: number;
     }[]
   >;
   /**
@@ -93,7 +95,17 @@ interface MatrixRTCSdk {
     connection: Connection | null;
     membership: CallMembership;
     participant: LocalParticipant | null;
+    speaking: boolean;
+    audioLevel: number;
   } | null>;
+  activeSpeakers$: Behavior<
+    {
+      connection: Connection | null;
+      membership: CallMembership;
+      participant: LocalParticipant | RemoteParticipant | null;
+      audioLevel: number;
+    }[]
+  >;
   /** Use the LocalMemberConnectionState returned from `join` for a more detailed connection state  */
   connected$: Behavior<boolean>;
   sendData?: (data: unknown) => Promise<void>;
@@ -302,6 +314,87 @@ export async function createMatrixRTCSdk(
 
   logger.info("createMatrixRTCSdk done");
 
+  const voiceActivityForMember$ = (member: {
+    userId: string;
+    membership$: Behavior<CallMembership>;
+  }): Observable<{ speaking: boolean; audioLevel: number }> =>
+    combineLatest([member.membership$, callViewModel.userMedia$]).pipe(
+      switchMap(([membership, mediaItems]) => {
+        const media = mediaItems.find(
+          (m) =>
+            m.userId === member.userId &&
+            m.id.startsWith(`${member.userId}:${membership.deviceId}:`),
+        );
+        return media
+          ? combineLatest([media.voiceActivity$, media.audioLevel$]).pipe(
+              map(([speaking, audioLevel]) => ({ speaking, audioLevel })),
+            )
+          : of({ speaking: false, audioLevel: 0 });
+      }),
+    );
+
+  const localMember$ = scope.behavior(
+    callViewModel.localMatrixLivekitMember$.pipe(
+      tap((member) => logger.info("localMatrixLivekitMember$ next: ", member)),
+      switchMap((member) => {
+        if (member === null) return of(null);
+        return combineLatest([
+          member.connection$,
+          member.membership$,
+          member.participant.value$,
+          voiceActivityForMember$(member),
+        ]).pipe(
+          map(([connection, membership, participant, voice]) => ({
+            connection,
+            membership,
+            participant,
+            speaking: voice.speaking,
+            audioLevel: voice.audioLevel,
+          })),
+        );
+      }),
+      tap((member) => logger.info("localMember$ next: ", member)),
+    ),
+  );
+
+  const remoteMembers$ = scope.behavior(
+    callViewModel.remoteMatrixLivekitMembers$.pipe(
+      switchMap((members) => {
+        const listOfMemberObservables = members.map((member) =>
+          combineLatest([
+            member.connection$,
+            member.membership$,
+            member.participant.value$,
+            voiceActivityForMember$(member),
+          ]).pipe(
+            map(([connection, membership, participant, voice]) => ({
+              connection,
+              membership,
+              participant,
+              speaking: voice.speaking,
+              audioLevel: voice.audioLevel,
+            })),
+            // using shareReplay instead of a Behavior here because the behavior would need
+            // a tricky scope.end() setup.
+            shareReplay({ bufferSize: 1, refCount: true }),
+          ),
+        );
+        return combineLatest(listOfMemberObservables);
+      }),
+    ),
+    [],
+  );
+  const activeSpeakers$ = scope.behavior(
+    combineLatest([localMember$, remoteMembers$]).pipe(
+      map(([local, remote]) =>
+        [...(local && local.speaking ? [local] : []), ...remote].filter(
+          (m) => m.speaking,
+        ),
+      ),
+    ),
+    [],
+  );
+
   return {
     join: (): void => {
       // first lets try making the widget sticky
@@ -317,53 +410,10 @@ export async function createMatrixRTCSdk(
       scope.end();
     },
     data$,
-    localMember$: scope.behavior(
-      callViewModel.localMatrixLivekitMember$.pipe(
-        tap((member) =>
-          logger.info("localMatrixLivekitMember$ next: ", member),
-        ),
-        switchMap((member) => {
-          if (member === null) return of(null);
-          return combineLatest([
-            member.connection$,
-            member.membership$,
-            member.participant.value$,
-          ]).pipe(
-            map(([connection, membership, participant]) => ({
-              connection,
-              membership,
-              participant,
-            })),
-          );
-        }),
-        tap((member) => logger.info("localMember$ next: ", member)),
-      ),
-    ),
+    localMember$,
     connected$: callViewModel.connected$,
-    remoteMembers$: scope.behavior(
-      callViewModel.remoteMatrixLivekitMembers$.pipe(
-        switchMap((members) => {
-          const listOfMemberObservables = members.map((member) =>
-            combineLatest([
-              member.connection$,
-              member.membership$,
-              member.participant.value$,
-            ]).pipe(
-              map(([connection, membership, participant]) => ({
-                connection,
-                membership,
-                participant,
-              })),
-              // using shareReplay instead of a Behavior here because the behavior would need
-              // a tricky scope.end() setup.
-              shareReplay({ bufferSize: 1, refCount: true }),
-            ),
-          );
-          return combineLatest(listOfMemberObservables);
-        }),
-      ),
-      [],
-    ),
+    remoteMembers$,
+    activeSpeakers$,
     sendData,
     sendRoomMessage,
   };
