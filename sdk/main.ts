@@ -314,7 +314,7 @@ export async function createMatrixRTCSdk(
 
   logger.info("createMatrixRTCSdk done");
 
- const voiceActivityForMember$ = (member: {
+  const voiceActivityForMember$ = (member: {
     userId: string;
     membership$: Behavior<CallMembership>;
   }): Observable<{ speaking: boolean; audioLevel: number }> =>

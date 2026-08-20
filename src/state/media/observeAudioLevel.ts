@@ -53,7 +53,6 @@ function isAudioTrack(
   return track.kind === "audio" && typeof track.mediaStreamTrack === "object";
 }
 
-
 // Raw audio level (0-1) of a participant's microphone track, sampled continuously.
 export function observeTrackAudioLevel$(
   track$: Observable<Track | undefined>,
@@ -108,4 +107,3 @@ export function observeSpeakingFromLevel$(
     distinctUntilChanged(),
   );
 }
-
